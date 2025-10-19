@@ -14,7 +14,7 @@ Available Projections:
     - LLM Context projection (project_to_llm_context)
     - Next Step projection (project_to_next_step, StepType)
     - Session State projection (project_to_session_state, SessionStatus, SessionState)
-    - Tool Arguments projection (coming in Task 4.4)
+    - Tool Arguments projection (project_to_tool_arguments, get_tool_call_by_name)
 
 Example:
     >>> from messagedb_agent.projections import ProjectionFunction, project_with_metadata
@@ -55,6 +55,13 @@ from messagedb_agent.projections.session_state import (
     is_session_active,
     project_to_session_state,
 )
+from messagedb_agent.projections.tool_args import (
+    count_tool_calls,
+    get_all_tool_names,
+    get_tool_call_by_name,
+    has_pending_tool_calls,
+    project_to_tool_arguments,
+)
 
 __all__ = [
     # Base infrastructure
@@ -78,4 +85,10 @@ __all__ = [
     "project_to_session_state",
     "is_session_active",
     "get_session_duration",
+    # Tool Arguments projection
+    "project_to_tool_arguments",
+    "get_tool_call_by_name",
+    "get_all_tool_names",
+    "has_pending_tool_calls",
+    "count_tool_calls",
 ]
