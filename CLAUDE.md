@@ -65,7 +65,10 @@ This loop can be explicit (single process) or distributed (event-triggered steps
 - **Language**: Python 3.11+ with type hints
 - **Package Manager**: `uv` (not pip/poetry)
 - **Event Store**: Message DB (PostgreSQL extension)
-- **LLM**: Google Vertex AI (Gemini or Claude models via ADC auth)
+- **LLM**: Google Vertex AI with unified interface supporting:
+  - Gemini models (via `google-cloud-aiplatform` SDK)
+  - Claude models (via `anthropic[vertex]` SDK)
+  - Both use Application Default Credentials (ADC) for authentication
 - **Connection Pooling**: psycopg3 with psycopg-pool
 - **Logging**: structlog (structured logging)
 - **Tracing**: OpenTelemetry
@@ -113,11 +116,17 @@ uv run basedpyright src/               # basedpyright type checker only
 # Run all tests (Docker container starts automatically via pytest-docker)
 uv run pytest
 
+# Run only unit tests (skip integration tests that call real LLM APIs)
+uv run pytest -m "not integration"
+
 # Run with verbose output
 uv run pytest -v
 
 # Run specific test file
 uv run pytest tests/store/test_operations.py
+
+# Run integration tests (requires GCP credentials)
+uv run pytest tests/llm/test_unified_integration.py -v -s
 
 # Run with coverage
 uv run pytest --cov=messagedb_agent --cov-report=term-missing
@@ -127,6 +136,12 @@ uv run pytest tests/store/test_operations.py::test_write_event
 ```
 
 **Note**: Tests automatically start a Message DB Docker container using `ethangarofolo/message-db:1.3.1`. The container is managed by pytest-docker and will be cleaned up after tests complete. No manual container management required.
+
+**Integration Tests**: LLM integration tests are marked with `@pytest.mark.integration` and require:
+1. GCP credentials configured via `gcloud auth application-default login`
+2. Environment variables: `GCP_PROJECT` and optionally `GCP_LOCATION` (defaults to us-central1)
+3. Vertex AI API enabled in your GCP project
+4. Run with: `pytest tests/llm/test_unified_integration.py -v -s` (use `-s` to see output)
 
 ## Code Style Guidelines
 
@@ -187,21 +202,82 @@ src/messagedb_agent/
 - Multiple projections can exist from same event stream
 - Examples: LLM context projection, session state projection, tool arguments projection
 
+### LLM Integration (Unified API)
+
+The system provides a unified interface for both Gemini and Claude models via Vertex AI:
+
+```python
+from messagedb_agent.llm import create_llm_client, Message, ToolDeclaration
+from messagedb_agent.config import VertexAIConfig
+
+# Create config (works for either model - just change model_name)
+config = VertexAIConfig(
+    project="my-project",
+    location="us-central1",
+    model_name="claude-sonnet-4-5@20250929"  # or "gemini-2.5-flash"
+)
+
+# Factory auto-detects and creates appropriate client
+client = create_llm_client(config)
+
+# Same API for both models
+messages = [Message(role="user", text="Hello!")]
+response = client.call(messages)
+
+# Tool calling works the same way
+tool = ToolDeclaration(
+    name="get_weather",
+    description="Get weather for a location",
+    parameters={
+        "type": "object",
+        "properties": {
+            "city": {"type": "string", "description": "City name"}
+        },
+        "required": ["city"]
+    }
+)
+response = client.call(messages, tools=[tool], system_prompt="You are helpful")
+```
+
+**Key Classes:**
+- `BaseLLMClient` - Abstract base class for all LLM clients
+- `GeminiClient` - Gemini implementation using Vertex AI GenerativeModel API
+- `ClaudeClient` - Claude implementation using AnthropicVertex SDK
+- `create_llm_client()` - Factory that auto-detects model type from name
+- `Message` - Universal message format (role: user/assistant/tool, text, tool_calls, etc.)
+- `ToolDeclaration` - Universal tool definition format
+- `LLMResponse` - Universal response format (text, tool_calls, token_usage)
+
+**Both models support:**
+- Text generation
+- System prompts
+- Tool/function calling
+- Multi-turn conversations
+- Token usage tracking
+
 ### Current Implementation Status
 See `tasks.md` for detailed progress. Key completed tasks:
 - Phase 1: Project foundation (complete)
-- Task 2.1: Message DB client with connection pooling (complete)
-- Task 2.2: write_event function with OCC (complete)
-- Task 2.3: read_stream function (complete)
+- Phase 2: Event Store Integration (complete)
+  - Task 2.1: Message DB client with connection pooling
+  - Task 2.2: write_event function with OCC
+  - Task 2.3: read_stream function
+  - Task 2.4: Stream utilities (build_stream_name, thread_id generation)
+- Phase 5: LLM Integration (complete)
+  - Task 5.1: Vertex AI client setup
+  - Task 5.2: Message formatting
+  - Task 5.3: LLM call function (superseded by unified API)
+  - Task 5.3.1: Unified interface with Claude support (complete)
 - Task 10.2: Message DB test container with automatic Docker management (complete)
 
+**Progress: 12/78 tasks complete (15.4%)**
+
 Still to implement:
-- Task 2.4: Stream utilities (build_stream_name, thread_id generation)
-- Event type definitions
-- Projection framework
-- LLM integration
-- Tool framework
-- Processing engine
+- Phase 3: Event type definitions
+- Phase 4: Projection framework
+- Phase 6: Tool framework
+- Phase 7: Processing engine
+- Phase 8: Observability
 
 ## Testing Strategy
 
