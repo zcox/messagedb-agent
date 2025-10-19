@@ -125,8 +125,12 @@ uv run pytest -v
 # Run specific test file
 uv run pytest tests/store/test_operations.py
 
-# Run integration tests (requires GCP credentials)
+# Run all integration tests (requires GCP credentials)
+uv run pytest -m integration -v -s
+
+# Run specific integration test files
 uv run pytest tests/llm/test_unified_integration.py -v -s
+uv run pytest tests/test_e2e_integration.py -v -s
 
 # Run with coverage
 uv run pytest --cov=messagedb_agent --cov-report=term-missing
@@ -137,11 +141,11 @@ uv run pytest tests/store/test_operations.py::test_write_event
 
 **Note**: Tests automatically start a Message DB Docker container using `ethangarofolo/message-db:1.3.1`. The container is managed by pytest-docker and will be cleaned up after tests complete. No manual container management required.
 
-**Integration Tests**: LLM integration tests are marked with `@pytest.mark.integration` and require:
+**Integration Tests**: All integration tests are marked with `@pytest.mark.integration` and require:
 1. GCP credentials configured via `gcloud auth application-default login`
 2. Environment variables: `GCP_PROJECT` and optionally `GCP_LOCATION` (defaults to us-central1)
 3. Vertex AI API enabled in your GCP project
-4. Run with: `pytest tests/llm/test_unified_integration.py -v -s` (use `-s` to see output)
+4. Run all integration tests with: `uv run pytest -m integration -v -s` (use `-s` to see output)
 
 ## Code Style Guidelines
 
