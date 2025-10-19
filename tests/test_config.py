@@ -345,6 +345,10 @@ class TestLoadConfig:
         monkeypatch.setenv("DB_PASSWORD", "testpass")
         monkeypatch.setenv("GCP_PROJECT", "test-project")
 
+        # Clear optional variables to test defaults
+        monkeypatch.delenv("GCP_LOCATION", raising=False)
+        monkeypatch.delenv("MODEL_NAME", raising=False)
+
         config = load_config()
 
         # Check defaults
@@ -378,6 +382,9 @@ class TestLoadConfig:
         """load_config raises ValueError if GCP_PROJECT is missing."""
         monkeypatch.setenv("DB_USER", "testuser")
         monkeypatch.setenv("DB_PASSWORD", "testpass")
+
+        # Ensure GCP_PROJECT is not set
+        monkeypatch.delenv("GCP_PROJECT", raising=False)
 
         with pytest.raises(ValueError, match="Required environment variable GCP_PROJECT"):
             load_config()

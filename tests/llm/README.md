@@ -69,12 +69,16 @@ pytest -m "not integration"
 - **test_gemini_with_system_prompt**: System prompt handling
 - **test_gemini_function_calling**: Tool/function calling capability
 
-### Claude Tests (`TestClaudeIntegration`)
+### Claude Tests (`TestClaudeIntegration`) - CURRENTLY SKIPPED
+**Note**: Claude models on Vertex AI are currently not supported by our implementation. Claude models require the `anthropic[vertex]` SDK with a different API (`AnthropicVertex` client and `messages.create()` method) instead of the `GenerativeModel` API used for Gemini models. These tests are skipped until Claude support is implemented.
+
 - **test_claude_simple_text_generation**: Basic text generation with Claude
 - **test_claude_with_system_prompt**: System prompt handling
 - **test_claude_function_calling**: Tool/function calling capability
 
-### Cross-Model Tests (`TestCrossModelCompatibility`)
+### Cross-Model Tests (`TestCrossModelCompatibility`) - CURRENTLY SKIPPED
+**Note**: These tests are skipped until Claude support is implemented.
+
 - **test_same_code_works_for_both_models**: Verifies our code works identically with both Gemini and Claude
 
 ## Expected Behavior

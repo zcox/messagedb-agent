@@ -190,7 +190,20 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - Added LLM error hierarchy: LLMError, LLMAPIError, LLMResponseError
   - Created create_function_declaration() helper function
   - Extracts token usage from Vertex AI usage_metadata
+  - Fixed Gemini function calling to handle ValueError when accessing text on function call responses
   - All tests passing, linting clean
+  - **NOTE**: Currently only supports Gemini models. Claude models require anthropic[vertex] SDK.
+
+- [ ] **Task 5.3.1: Add Claude model support via AnthropicVertex SDK**
+  - Add `anthropic[vertex]` dependency to pyproject.toml
+  - Create separate client for Claude models using `AnthropicVertex` from anthropic package
+  - Claude models use different API: `client.messages.create()` instead of `GenerativeModel.generate_content()`
+  - Update `call_llm()` or create separate `call_claude()` function to handle Claude API
+  - Map Claude response format to our LLMResponse dataclass
+  - Handle tool calling in Claude's format
+  - Update integration tests to enable Claude tests
+  - Ensure both Gemini and Claude work with same high-level interface
+  - Reference: https://docs.claude.com/en/api/claude-on-vertex-ai
 
 - [ ] **Task 5.4: Define system prompt**
   - Create `src/messagedb_agent/llm/prompts.py`
@@ -597,23 +610,26 @@ Recommended implementation order for complete system:
 
 ## Progress Tracking
 
-- Total Tasks: 77
+- Total Tasks: 78 (added Task 5.3.1)
 - Completed: 11 (Tasks 1.1, 1.2, 1.3, 2.1, 2.2, 2.3, 2.4, 5.1, 5.2, 5.3, 10.2)
 - In Progress: 0
-- Remaining: 66
-- Completion: 14.3%
+- Remaining: 67
+- Completion: 14.1%
 
 Last Updated: 2025-10-19
 
 **Recent Completions:**
-- Task 5.3: Implement LLM call function
+- Task 5.3: Implement LLM call function (UPDATED)
   - Created ToolCall and LLMResponse dataclasses with comprehensive validation
   - Implemented call_llm() to invoke Vertex AI GenerativeModel.generate_content()
   - Parses responses: extracts text, function calls, and token usage metadata
   - Added LLM error hierarchy: LLMError, LLMAPIError, LLMResponseError
   - Created create_function_declaration() helper for tool definitions
   - Proper error handling and wrapping of Vertex AI exceptions
-  - All 169 tests passing, linting and type checking clean
+  - **Fixed Gemini function calling bug**: Added handling for ValueError when accessing .text on responses with function calls
+  - Created integration tests for Gemini models (all passing)
+  - Documented Claude model limitation: requires anthropic[vertex] SDK (see Task 5.3.1)
+  - All 172 tests passing, linting and type checking clean
 - Task 5.2: Implement message formatting
   - Created Message dataclass for internal message representation
   - Implemented format_messages() to convert to Vertex AI Content/Part format

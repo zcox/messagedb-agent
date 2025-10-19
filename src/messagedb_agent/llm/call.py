@@ -196,10 +196,7 @@ def _parse_response(response: GenerationResponse, model_name: str) -> LLMRespons
 
         candidate = response.candidates[0]
 
-        # Extract text (may be None if only function calls)
-        text = candidate.text if hasattr(candidate, "text") and candidate.text else None
-
-        # Extract tool calls
+        # Extract tool calls first (before trying to access text)
         tool_calls: list[ToolCall] = []
         if hasattr(candidate, "function_calls") and candidate.function_calls:
             for i, fc in enumerate(candidate.function_calls):
@@ -212,6 +209,20 @@ def _parse_response(response: GenerationResponse, model_name: str) -> LLMRespons
                         arguments=dict(fc.args) if fc.args else {},
                     )
                 )
+
+        # Extract text (may be None if only function calls)
+        # Note: Accessing candidate.text raises ValueError (wrapped AttributeError)
+        # if the response contains ONLY function calls and no text.
+        text: str | None = None
+        try:
+            # Try to get the text - this will fail with ValueError if there's
+            # a function call instead of text
+            text = candidate.text if candidate.text else None
+        except (AttributeError, ValueError):
+            # This is expected when there are only function calls and no text
+            # The Vertex AI SDK raises ValueError when accessing .text on a
+            # candidate that has function_call instead
+            text = None
 
         # Extract token usage
         token_usage: dict[str, int] = {}
