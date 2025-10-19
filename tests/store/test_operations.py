@@ -167,6 +167,51 @@ class TestWriteEvent:
             # actual_version should be 0 (position of last event)
             assert error.actual_version == 0
 
+    def test_optimistic_concurrency_empty_stream_success(
+        self, messagedb_client: MessageDBClient, test_stream_name: str
+    ) -> None:
+        """Test writing to empty stream with expected_version=-1 succeeds."""
+        with messagedb_client:
+            # Write first event with expected_version=-1 (stream must be empty)
+            position = write_event(
+                client=messagedb_client,
+                stream_name=test_stream_name,
+                event_type="SessionStarted",
+                data={"thread_id": "thread123"},
+                expected_version=-1,  # Stream must be empty
+            )
+
+            assert position == 0
+
+    def test_optimistic_concurrency_empty_stream_failure(
+        self, messagedb_client: MessageDBClient, test_stream_name: str
+    ) -> None:
+        """Test writing to non-empty stream with expected_version=-1 fails."""
+        with messagedb_client:
+            # Write first event without OCC
+            write_event(
+                client=messagedb_client,
+                stream_name=test_stream_name,
+                event_type="SessionStarted",
+                data={"thread_id": "thread123"},
+            )
+
+            # Try to write with expected_version=-1 (but stream is not empty)
+            with pytest.raises(OptimisticConcurrencyError) as exc_info:
+                write_event(
+                    client=messagedb_client,
+                    stream_name=test_stream_name,
+                    event_type="UserMessageAdded",
+                    data={"message": "Hello"},
+                    expected_version=-1,  # Stream must be empty, but it's not
+                )
+
+            error = exc_info.value
+            assert error.stream_name == test_stream_name
+            assert error.expected_version == -1
+            # actual_version should be 0 (position of last event)
+            assert error.actual_version == 0
+
 
 class TestReadStream:
     """Tests for read_stream function."""
