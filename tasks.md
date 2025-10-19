@@ -267,12 +267,17 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
 ## Phase 6: Tool Framework
 
 ### 6. Tool Definition and Execution
-- [ ] **Task 6.1: Create tool registration system**
-  - Create `src/messagedb_agent/tools/registry.py`
-  - Define Tool dataclass: name, description, parameters_schema (dict), function (Callable)
-  - Create ToolRegistry class with register/get methods
-  - Implement function decorator `@tool(name, description)` for easy registration
-  - Auto-generate parameters_schema from function type hints and docstrings
+- [x] **Task 6.1: Create tool registration system**
+  - Created `src/messagedb_agent/tools/registry.py`
+  - Defined Tool frozen dataclass: name, description, parameters_schema (dict), function (Callable)
+  - Created ToolRegistry class with register/get/has/unregister/clear/list_names/list_tools methods
+  - Implemented @tool decorator for easy registration with auto-schema generation
+  - Implemented register_tool() decorator factory for automatic registration to registry
+  - Auto-generates JSON Schema from Python type hints (int→integer, str→string, float→number, bool→boolean, list→array, dict→object)
+  - Added get_tool_metadata() to extract metadata from decorated functions
+  - Custom error hierarchy: ToolError, ToolNotFoundError, ToolRegistrationError
+  - 34 comprehensive tests with 98% code coverage
+  - All tests passing, linting/formatting/type checking clean
 
 - [ ] **Task 6.2: Implement tool execution**
   - Create `src/messagedb_agent/tools/executor.py`
@@ -664,14 +669,20 @@ Recommended implementation order for complete system:
 ## Progress Tracking
 
 - Total Tasks: 78
-- Completed: 23 (Tasks 1.1-1.3, 2.1-2.4, 3.1-3.5, 4.1-4.5, 5.1-5.4, 10.2)
+- Completed: 24 (Tasks 1.1-1.3, 2.1-2.4, 3.1-3.5, 4.1-4.5, 5.1-5.4, 6.1, 10.2)
 - In Progress: 0
-- Remaining: 55
-- Completion: 29.5%
+- Remaining: 54
+- Completion: 30.8%
 
 Last Updated: 2025-10-19
 
 **Recent Completions:**
+- Task 6.1: Create tool registration system (COMPLETE)
+  - Created Tool dataclass and ToolRegistry class
+  - Implemented @tool decorator with auto-schema generation from type hints
+  - Implemented register_tool() decorator factory
+  - Custom error hierarchy and comprehensive validation
+  - 34 tests with 98% coverage, all passing
 - Task 4.4: Implement Tool Arguments projection (COMPLETE)
   - Created project_to_tool_arguments() to extract tool calls from events
   - Returns list of tool call dicts with id, name, arguments
