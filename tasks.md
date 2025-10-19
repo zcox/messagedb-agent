@@ -171,7 +171,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - Return dict mapping tool_name to arguments
   - Handle case where no tool calls present
 
-- [ ] **Task 4.5: Implement Next Step projection**
+- [x] **Task 4.5: Implement Next Step projection**
   - Create `src/messagedb_agent/projections/next_step.py`
   - Define StepType enum: LLM_CALL, TOOL_EXECUTION, TERMINATION
   - Implement `project_to_next_step(events) -> Tuple[StepType, Any]`
@@ -182,6 +182,11 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
     - ToolExecutionCompleted → LLM_CALL (to process tool results)
     - SessionTerminationRequested → TERMINATION
     - SessionCompleted → TERMINATION
+  - Created StepType enum with three states
+  - Implemented Last Event Pattern decision logic
+  - Added helper functions: should_terminate(), get_pending_tool_calls(), count_steps_taken()
+  - 24 comprehensive tests with 93% code coverage
+  - Handles unknown event types gracefully (defaults to LLM_CALL)
 
 ## Phase 5: LLM Integration
 
@@ -652,14 +657,21 @@ Recommended implementation order for complete system:
 ## Progress Tracking
 
 - Total Tasks: 78
-- Completed: 20 (Tasks 1.1-1.3, 2.1-2.4, 3.1-3.5, 4.1-4.2, 5.1-5.4, 10.2)
+- Completed: 21 (Tasks 1.1-1.3, 2.1-2.4, 3.1-3.5, 4.1-4.2, 4.5, 5.1-5.4, 10.2)
 - In Progress: 0
-- Remaining: 58
-- Completion: 25.6%
+- Remaining: 57
+- Completion: 26.9%
 
 Last Updated: 2025-10-19
 
 **Recent Completions:**
+- Task 4.5: Implement Next Step projection (COMPLETE)
+  - Created StepType enum (LLM_CALL, TOOL_EXECUTION, TERMINATION)
+  - Implemented project_to_next_step() using Last Event Pattern
+  - Decision logic based on most recent event type
+  - Helper functions: should_terminate(), get_pending_tool_calls(), count_steps_taken()
+  - 24 comprehensive tests with 93% code coverage
+  - All type checking passed, handles edge cases gracefully
 - Task 4.2: Implement LLM Context projection (COMPLETE)
   - Created project_to_llm_context() function that converts events to Message objects
   - Converts UserMessageAdded, LLMResponseReceived, ToolExecutionCompleted events

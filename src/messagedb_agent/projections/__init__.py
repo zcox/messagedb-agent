@@ -12,9 +12,9 @@ Key Concepts:
 Available Projections:
     - Base infrastructure (ProjectionFunction, ProjectionResult)
     - LLM Context projection (project_to_llm_context)
+    - Next Step projection (project_to_next_step, StepType)
     - Session State projection (coming in Task 4.3)
     - Tool Arguments projection (coming in Task 4.4)
-    - Next Step projection (coming in Task 4.5)
 
 Example:
     >>> from messagedb_agent.projections import ProjectionFunction, project_with_metadata
@@ -41,6 +41,13 @@ from messagedb_agent.projections.llm_context import (
     get_last_user_message,
     project_to_llm_context,
 )
+from messagedb_agent.projections.next_step import (
+    StepType,
+    count_steps_taken,
+    get_pending_tool_calls,
+    project_to_next_step,
+    should_terminate,
+)
 
 __all__ = [
     # Base infrastructure
@@ -52,4 +59,10 @@ __all__ = [
     "project_to_llm_context",
     "get_last_user_message",
     "count_conversation_turns",
+    # Next Step projection
+    "StepType",
+    "project_to_next_step",
+    "should_terminate",
+    "get_pending_tool_calls",
+    "count_steps_taken",
 ]
