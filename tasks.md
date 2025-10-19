@@ -279,14 +279,19 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - 34 comprehensive tests with 98% code coverage
   - All tests passing, linting/formatting/type checking clean
 
-- [ ] **Task 6.2: Implement tool execution**
-  - Create `src/messagedb_agent/tools/executor.py`
-  - Implement `execute_tool(tool_name, arguments, registry) -> Any`
-  - Look up tool in registry
-  - Call tool function with arguments (no validation in basic impl)
-  - Catch and wrap exceptions
-  - Return result or error
-  - Track execution time
+- [x] **Task 6.2: Implement tool execution**
+  - Created `src/messagedb_agent/tools/executor.py`
+  - Created ToolExecutionResult dataclass with success, result, error, execution_time_ms, tool_name
+  - Implemented execute_tool(tool_name, arguments, registry) -> ToolExecutionResult
+  - Looks up tool in registry and executes with provided arguments
+  - Catches all exceptions and wraps in result object (never raises)
+  - Tracks execution time using time.perf_counter() in milliseconds
+  - Formats errors as "ExceptionType: message"
+  - Added execute_tool_safe() convenience wrapper returning (result, error) tuple
+  - Added batch_execute_tools() for executing multiple tool calls in sequence
+  - Custom error hierarchy: ToolExecutionError, ToolExecutionTimeoutError
+  - 37 comprehensive tests with 100% code coverage
+  - All tests passing, linting/formatting/type checking clean
 
 - [ ] **Task 6.3: Create example tools**
   - Create `src/messagedb_agent/tools/builtin.py`
@@ -669,14 +674,20 @@ Recommended implementation order for complete system:
 ## Progress Tracking
 
 - Total Tasks: 78
-- Completed: 24 (Tasks 1.1-1.3, 2.1-2.4, 3.1-3.5, 4.1-4.5, 5.1-5.4, 6.1, 10.2)
+- Completed: 25 (Tasks 1.1-1.3, 2.1-2.4, 3.1-3.5, 4.1-4.5, 5.1-5.4, 6.1-6.2, 10.2)
 - In Progress: 0
-- Remaining: 54
-- Completion: 30.8%
+- Remaining: 53
+- Completion: 32.1%
 
 Last Updated: 2025-10-19
 
 **Recent Completions:**
+- Task 6.2: Implement tool execution (COMPLETE)
+  - Created ToolExecutionResult dataclass and execute_tool() function
+  - Full exception handling with no raised exceptions (all wrapped in result)
+  - Execution time tracking in milliseconds using perf_counter
+  - Added execute_tool_safe() and batch_execute_tools() utilities
+  - 37 tests with 100% coverage, all passing
 - Task 6.1: Create tool registration system (COMPLETE)
   - Created Tool dataclass and ToolRegistry class
   - Implemented @tool decorator with auto-schema generation from type hints
