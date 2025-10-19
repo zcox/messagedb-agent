@@ -29,6 +29,15 @@ from messagedb_agent.tools.registry import (
     register_tool,
     tool,
 )
+from messagedb_agent.tools.schema import (
+    filter_tools_by_name,
+    get_tool_names_from_declarations,
+    merge_schema_properties,
+    registry_to_function_declarations,
+    tool_to_function_declaration,
+    tools_to_function_declarations,
+    validate_function_declaration,
+)
 
 __all__ = [
     # Registry
@@ -53,4 +62,12 @@ __all__ = [
     "calculate",
     "get_builtin_tools",
     "register_builtin_tools",
+    # Schema conversion
+    "tool_to_function_declaration",
+    "tools_to_function_declarations",
+    "registry_to_function_declarations",
+    "get_tool_names_from_declarations",
+    "validate_function_declaration",
+    "filter_tools_by_name",
+    "merge_schema_properties",
 ]
