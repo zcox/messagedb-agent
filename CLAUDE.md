@@ -105,18 +105,23 @@ uv run basedpyright src/               # basedpyright type checker only
 
 ### Testing
 ```bash
-# Run all tests
+# Run all tests (Docker container starts automatically via pytest-docker)
 uv run pytest
 
+# Run with verbose output
+uv run pytest -v
+
 # Run specific test file
-uv run pytest tests/test_store.py
+uv run pytest tests/store/test_operations.py
 
 # Run with coverage
 uv run pytest --cov=messagedb_agent --cov-report=term-missing
 
 # Run specific test function
-uv run pytest tests/test_store.py::test_write_event
+uv run pytest tests/store/test_operations.py::test_write_event
 ```
+
+**Note**: Tests automatically start a Message DB Docker container using `ethangarofolo/message-db:1.3.1`. The container is managed by pytest-docker and will be cleaned up after tests complete. No manual container management required.
 
 ## Code Style Guidelines
 
@@ -182,9 +187,11 @@ See `tasks.md` for detailed progress. Key completed tasks:
 - Phase 1: Project foundation (complete)
 - Task 2.1: Message DB client with connection pooling (complete)
 - Task 2.2: write_event function with OCC (complete)
+- Task 2.3: read_stream function (complete)
+- Task 10.2: Message DB test container with automatic Docker management (complete)
 
 Still to implement:
-- Task 2.3: read_stream function
+- Task 2.4: Stream utilities (build_stream_name, thread_id generation)
 - Event type definitions
 - Projection framework
 - LLM integration

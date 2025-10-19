@@ -336,37 +336,29 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
     - Test thread_id
     - Tool registry with test tools
 
-- [x] **Task 10.2: Setup Message DB test container** (Partially Complete)
-  - Created `docker-compose.test.yml` using `articulate/message-db:1.2.2` image
-  - Configured PostgreSQL with Message DB extension installed
+- [x] **Task 10.2: Setup Message DB test container** (Complete)
+  - Created `docker-compose.test.yml` using `ethangarofolo/message-db:1.3.1` image
+  - Configured PostgreSQL with Message DB v1.3.0 extension installed
   - Added pytest-docker dependency and fixtures in `tests/conftest.py`:
-    - `messagedb_service`: Starts container and waits for initialization
+    - `messagedb_service`: Starts container automatically and waits for full initialization
     - `messagedb_config`: Provides test database configuration (postgres user, port 5433)
     - `messagedb_client`: Provides connected MessageDB client instance
-  - Updated `src/messagedb_agent/store/operations.py` to use `message_store` schema prefix for functions
-  - All Message DB functions are in the `message_store` schema, not `public`
+  - Updated `src/messagedb_agent/store/client.py` to set `search_path=message_store,public` in connection string
+    - This allows Message DB internal functions like `acquire_lock()` and `is_category()` to be found
+  - Updated `src/messagedb_agent/store/operations.py` to commit transactions after writes and reads
+    - Added explicit `conn.commit()` calls to persist changes and release locks
+  - All Message DB functions are in the `message_store` schema (e.g., `message_store.write_message()`)
 
-  **IMPORTANT - pytest-docker Incompatibility:**
-  - The Message DB Docker image initializes in ~8 seconds (database creation, schema setup, functions, indexes, views)
-  - pytest-docker creates a NEW container with unique project name for each test session
-  - This means every test run gets a fresh database that needs 8 seconds to initialize
-  - pytest-docker's health check mechanism runs DURING initialization, sees partial state, and proceeds before completion
-  - Result: Tests fail with "function acquire_lock does not exist" even though functions exist during health check
-
-  **SOLUTION - Manual Container Startup (REQUIRED):**
+  **Usage:**
   ```bash
-  # Start container manually BEFORE running tests:
-  docker compose -f docker-compose.test.yml up -d
+  # Simply run tests - Docker container starts automatically via pytest-docker
+  uv run pytest
 
-  # Wait ~8-10 seconds for Message DB to finish initialization
-  # You can check logs: docker compose -f docker-compose.test.yml logs
-  # Look for "Done Installing Database" and "database system is ready to accept connections"
+  # Run with verbose output
+  uv run pytest -v
 
-  # Then run tests (they will connect to the running container):
+  # Run specific test file
   uv run pytest tests/store/test_operations.py -v
-
-  # Stop container when done:
-  docker compose -f docker-compose.test.yml down
   ```
 
   **Database Connection Details:**
@@ -375,12 +367,14 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - Database: message_store
   - User: postgres
   - Password: message_store_password
+  - Search path: message_store,public (configured in connection string)
   - All Message DB functions are in `message_store` schema (e.g., `message_store.write_message()`)
 
-  **Future Improvements:**
-  - Consider creating a custom Docker image with Message DB pre-installed to speed up initialization
-  - Or implement database reset fixture that truncates tables between tests (not implemented yet)
-  - Or use GitHub Actions service containers which handle longer startup times better
+  **Implementation Notes:**
+  - The `ethangarofolo/message-db:1.3.1` image provides clean, reliable initialization
+  - Health check waits for all Message DB functions to be installed before proceeding
+  - Container is automatically cleaned up after test session completes
+  - Fresh database for each test run ensures test isolation
 
 - [ ] **Task 10.3: Write projection tests**
   - Create `tests/test_projections.py`
@@ -523,4 +517,8 @@ Last Updated: 2025-10-19
 
 **Recent Completions:**
 - Task 2.3: Implemented `read_stream` function with Event dataclass and comprehensive tests
-- Task 10.2: Set up Docker-based Message DB test infrastructure (manual container startup required)
+- Task 10.2: Set up Docker-based Message DB test infrastructure with automatic container management
+  - Switched to `ethangarofolo/message-db:1.3.1` image for reliable initialization
+  - Fixed transaction management with explicit commits in write_event and read_stream
+  - Configured search_path in connection string to support Message DB internal functions
+  - All 14 tests passing with no manual Docker container management required
