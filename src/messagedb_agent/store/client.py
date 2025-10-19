@@ -142,6 +142,7 @@ class MessageDBClient:
             conninfo=conninfo,
             min_size=self.config.min_size,
             max_size=self.config.max_size,
+            open=True,  # Explicitly open the pool immediately
             kwargs={"row_factory": dict_row},  # Return results as dictionaries
         )
 
