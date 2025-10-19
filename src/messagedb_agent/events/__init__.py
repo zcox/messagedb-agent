@@ -12,6 +12,12 @@ from messagedb_agent.events.agent import (
     ToolCall,
 )
 from messagedb_agent.events.base import BaseEvent, EventData
+from messagedb_agent.events.system import (
+    SESSION_COMPLETED,
+    SESSION_STARTED,
+    SessionCompletedData,
+    SessionStartedData,
+)
 from messagedb_agent.events.user import (
     SESSION_TERMINATION_REQUESTED,
     USER_MESSAGE_ADDED,
@@ -31,4 +37,8 @@ __all__ = [
     "ToolCall",
     "LLM_RESPONSE_RECEIVED",
     "LLM_CALL_FAILED",
+    "SessionStartedData",
+    "SessionCompletedData",
+    "SESSION_STARTED",
+    "SESSION_COMPLETED",
 ]
