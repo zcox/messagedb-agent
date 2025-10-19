@@ -164,13 +164,18 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - Added comprehensive docstrings and type hints
   - All tests passing, linting clean
 
-- [ ] **Task 5.2: Implement message formatting**
+- [x] **Task 5.2: Implement message formatting**
   - Create `src/messagedb_agent/llm/format.py`
   - Implement function to convert projection messages to Vertex AI format
   - Handle system prompts
   - Handle user/assistant message formatting
   - Handle function/tool call formatting
   - Handle tool result formatting
+  - Created Message dataclass for internal representation
+  - Implemented format_messages() to convert to Vertex AI Content/Part objects
+  - Added convenience functions: create_user_message(), create_model_message(), create_function_response_message()
+  - Comprehensive validation and error handling
+  - All tests passing, linting clean
 
 - [ ] **Task 5.3: Implement LLM call function**
   - Create `src/messagedb_agent/llm/call.py`
@@ -587,21 +592,27 @@ Recommended implementation order for complete system:
 ## Progress Tracking
 
 - Total Tasks: 77
-- Completed: 9 (Tasks 1.1, 1.2, 1.3, 2.1, 2.2, 2.3, 2.4, 5.1, 10.2)
+- Completed: 10 (Tasks 1.1, 1.2, 1.3, 2.1, 2.2, 2.3, 2.4, 5.1, 5.2, 10.2)
 - In Progress: 0
-- Remaining: 68
-- Completion: 11.7%
+- Remaining: 67
+- Completion: 13.0%
 
 Last Updated: 2025-10-19
 
 **Recent Completions:**
+- Task 5.2: Implement message formatting
+  - Created Message dataclass for internal message representation
+  - Implemented format_messages() to convert to Vertex AI Content/Part format
+  - Handles user, model, and function messages with validation
+  - Supports system prompts, text, function calls, and function responses
+  - Added convenience functions for message creation
+  - All 169 tests passing, linting and type checking clean
 - Task 5.1: Setup Vertex AI client
   - Created `VertexAIClient` class with ADC authentication support
   - Supports both Gemini and Claude models via Vertex AI API
   - Uses Application Default Credentials via `google.auth.default()`
   - Added factory function `create_client()` for convenient initialization
   - Comprehensive docstrings and type hints with google.auth type compatibility
-  - All 169 tests passing, linting and type checking clean
 - Task 2.4: Implemented stream utilities for Message DB stream name management
   - Created `generate_thread_id()` for UUID4 thread identifier generation
   - Created `build_stream_name()` to build stream names in format `category:version-thread_id`
