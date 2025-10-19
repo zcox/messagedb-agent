@@ -13,13 +13,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
    - `uv run basedpyright src/` - Type check
    - **Fix any remaining errors** reported by these tools before proceeding
 
-2. **Commit changes to git** when major work is complete:
+2. **Run all tests** to verify functionality:
+   - `uv run pytest` - Run all tests (Docker container starts automatically)
+   - **Fix any failing tests** before proceeding
+   - Tests must pass before committing changes
+
+3. **Commit changes to git** when major work is complete:
    - Stage relevant files with `git add`
    - Create a descriptive commit message following the existing style
    - Include the Claude Code footer in commit messages
    - Verify commit success with `git status`
 
-Do NOT ask the user if they want you to run linting or commit - do it proactively as part of completing the work.
+Do NOT ask the user if they want you to run linting, tests, or commit - do it proactively as part of completing the work.
 
 ## Project Overview
 
