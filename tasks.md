@@ -64,10 +64,17 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - Exported Event class and read_stream function from store module
   - NOTE: Must use `message_store.get_stream_messages()` with schema prefix - functions are in message_store schema
 
-- [ ] **Task 2.4: Implement stream utilities**
-  - Create stream_name builder: `build_stream_name(category, version, thread_id)` → `"agent:v0-{threadId}"`
-  - Create thread_id generator using UUID4
-  - Add function to parse stream_name back into components
+- [x] **Task 2.4: Implement stream utilities**
+  - Created `src/messagedb_agent/store/stream.py` with three core functions:
+    - `generate_thread_id()`: Generates unique UUID4 thread identifiers
+    - `build_stream_name(category, version, thread_id)`: Builds stream names in format `category:version-thread_id`
+    - `parse_stream_name(stream_name)`: Parses stream names back into (category, version, thread_id) components
+  - Comprehensive input validation with clear error messages
+  - Prevents invalid characters: colon in category, dash in version
+  - Added comprehensive test suite in `tests/store/test_stream.py` (38 tests covering all functions)
+  - Tests include: UUID validation, format validation, round-trip consistency, error cases, edge cases
+  - Exported all three functions from store module
+  - All tests passing (52 total tests in project)
 
 ## Phase 3: Event Schema and Types
 
@@ -508,17 +515,23 @@ Recommended implementation order for efficient development:
 ## Progress Tracking
 
 - Total Tasks: 77
-- Completed: 7 (Tasks 1.1, 1.2, 1.3, 2.1, 2.2, 2.3, 10.2)
+- Completed: 8 (Tasks 1.1, 1.2, 1.3, 2.1, 2.2, 2.3, 2.4, 10.2)
 - In Progress: 0
-- Remaining: 70
-- Completion: 9.1%
+- Remaining: 69
+- Completion: 10.4%
 
 Last Updated: 2025-10-19
 
 **Recent Completions:**
+- Task 2.4: Implemented stream utilities for Message DB stream name management
+  - Created `generate_thread_id()` for UUID4 thread identifier generation
+  - Created `build_stream_name()` to build stream names in format `category:version-thread_id`
+  - Created `parse_stream_name()` to parse stream names back into components
+  - Comprehensive validation: prevents invalid characters, validates all components
+  - Added 38 comprehensive tests covering all functions, edge cases, and round-trip consistency
+  - All 52 tests passing across the project
 - Task 2.3: Implemented `read_stream` function with Event dataclass and comprehensive tests
 - Task 10.2: Set up Docker-based Message DB test infrastructure with automatic container management
   - Switched to `ethangarofolo/message-db:1.3.1` image for reliable initialization
   - Fixed transaction management with explicit commits in write_event and read_stream
   - Configured search_path in connection string to support Message DB internal functions
-  - All 14 tests passing with no manual Docker container management required

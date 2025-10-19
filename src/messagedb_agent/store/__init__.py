@@ -12,6 +12,11 @@ from messagedb_agent.store.operations import (
     read_stream,
     write_event,
 )
+from messagedb_agent.store.stream import (
+    build_stream_name,
+    generate_thread_id,
+    parse_stream_name,
+)
 
 __all__ = [
     "MessageDBClient",
@@ -20,4 +25,7 @@ __all__ = [
     "OptimisticConcurrencyError",
     "read_stream",
     "write_event",
+    "build_stream_name",
+    "generate_thread_id",
+    "parse_stream_name",
 ]
