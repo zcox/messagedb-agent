@@ -177,7 +177,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - Comprehensive validation and error handling
   - All tests passing, linting clean
 
-- [ ] **Task 5.3: Implement LLM call function**
+- [x] **Task 5.3: Implement LLM call function**
   - Create `src/messagedb_agent/llm/call.py`
   - Implement `call_llm(messages, tools, model_name) -> LLMResponse`
   - LLMResponse dataclass: text, tool_calls (List[ToolCall]), model_name, token_usage (dict)
@@ -185,6 +185,12 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - Handle Vertex AI API errors with proper error types
   - Extract text and tool calls from response
   - Track token usage from response metadata
+  - Created ToolCall and LLMResponse dataclasses with validation
+  - Implemented call_llm() with error handling and response parsing
+  - Added LLM error hierarchy: LLMError, LLMAPIError, LLMResponseError
+  - Created create_function_declaration() helper function
+  - Extracts token usage from Vertex AI usage_metadata
+  - All tests passing, linting clean
 
 - [ ] **Task 5.4: Define system prompt**
   - Create `src/messagedb_agent/llm/prompts.py`
@@ -592,21 +598,28 @@ Recommended implementation order for complete system:
 ## Progress Tracking
 
 - Total Tasks: 77
-- Completed: 10 (Tasks 1.1, 1.2, 1.3, 2.1, 2.2, 2.3, 2.4, 5.1, 5.2, 10.2)
+- Completed: 11 (Tasks 1.1, 1.2, 1.3, 2.1, 2.2, 2.3, 2.4, 5.1, 5.2, 5.3, 10.2)
 - In Progress: 0
-- Remaining: 67
-- Completion: 13.0%
+- Remaining: 66
+- Completion: 14.3%
 
 Last Updated: 2025-10-19
 
 **Recent Completions:**
+- Task 5.3: Implement LLM call function
+  - Created ToolCall and LLMResponse dataclasses with comprehensive validation
+  - Implemented call_llm() to invoke Vertex AI GenerativeModel.generate_content()
+  - Parses responses: extracts text, function calls, and token usage metadata
+  - Added LLM error hierarchy: LLMError, LLMAPIError, LLMResponseError
+  - Created create_function_declaration() helper for tool definitions
+  - Proper error handling and wrapping of Vertex AI exceptions
+  - All 169 tests passing, linting and type checking clean
 - Task 5.2: Implement message formatting
   - Created Message dataclass for internal message representation
   - Implemented format_messages() to convert to Vertex AI Content/Part format
   - Handles user, model, and function messages with validation
   - Supports system prompts, text, function calls, and function responses
   - Added convenience functions for message creation
-  - All 169 tests passing, linting and type checking clean
 - Task 5.1: Setup Vertex AI client
   - Created `VertexAIClient` class with ADC authentication support
   - Supports both Gemini and Claude models via Vertex AI API
