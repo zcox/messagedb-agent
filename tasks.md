@@ -293,12 +293,18 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - 37 comprehensive tests with 100% code coverage
   - All tests passing, linting/formatting/type checking clean
 
-- [ ] **Task 6.3: Create example tools**
-  - Create `src/messagedb_agent/tools/builtin.py`
-  - Implement `get_current_time() -> str` - returns current datetime
-  - Implement `calculate(expression: str) -> float` - evaluates math expression safely
-  - Implement `echo(message: str) -> str` - returns the message (for testing)
-  - Register all builtin tools
+- [x] **Task 6.3: Create example tools**
+  - Created `src/messagedb_agent/tools/builtin.py`
+  - Implemented get_current_time() - returns current UTC time in ISO 8601 format
+  - Implemented calculate() - safe math evaluator using AST (NO eval())
+    - Supports: +, -, *, /, //, %, **, unary +/-
+    - Rejects: function calls, variables, unsafe operations
+    - Comprehensive error handling (division by zero, invalid syntax, etc.)
+  - Implemented echo() - simple echo for testing
+  - Implemented get_builtin_tools() - returns dict of all builtin tools
+  - Implemented register_builtin_tools() - registers all tools to registry
+  - 54 comprehensive tests with 95% code coverage
+  - All tests passing, linting/formatting/type checking clean
 
 - [ ] **Task 6.4: Convert tools to LLM function declarations**
   - Create `src/messagedb_agent/tools/schema.py`
@@ -674,14 +680,20 @@ Recommended implementation order for complete system:
 ## Progress Tracking
 
 - Total Tasks: 78
-- Completed: 25 (Tasks 1.1-1.3, 2.1-2.4, 3.1-3.5, 4.1-4.5, 5.1-5.4, 6.1-6.2, 10.2)
+- Completed: 26 (Tasks 1.1-1.3, 2.1-2.4, 3.1-3.5, 4.1-4.5, 5.1-5.4, 6.1-6.3, 10.2)
 - In Progress: 0
-- Remaining: 53
-- Completion: 32.1%
+- Remaining: 52
+- Completion: 33.3%
 
 Last Updated: 2025-10-19
 
 **Recent Completions:**
+- Task 6.3: Create example builtin tools (COMPLETE)
+  - Implemented get_current_time(), echo(), and calculate() tools
+  - calculate() uses safe AST parsing (NO eval()) for security
+  - Supports all basic arithmetic operators with comprehensive error handling
+  - Added get_builtin_tools() and register_builtin_tools() helpers
+  - 54 tests with 95% coverage, all passing
 - Task 6.2: Implement tool execution (COMPLETE)
   - Created ToolExecutionResult dataclass and execute_tool() function
   - Full exception handling with no raised exceptions (all wrapped in result)
