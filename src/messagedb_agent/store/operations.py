@@ -6,6 +6,8 @@ Message DB event streams.
 
 import json
 import uuid
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, cast
 
 import structlog
@@ -14,6 +16,31 @@ from psycopg import errors as psycopg_errors
 from messagedb_agent.store.client import MessageDBClient
 
 logger = structlog.get_logger(__name__)
+
+
+@dataclass
+class Event:
+    """Represents a single event read from a Message DB stream.
+
+    Attributes:
+        id: Unique identifier of the event (UUID)
+        stream_name: Name of the stream containing this event
+        type: Event type/name (e.g., "UserMessageAdded")
+        position: Position of the event within its stream
+        global_position: Global position across all streams
+        data: Event payload (deserialized from JSON)
+        metadata: Event metadata (deserialized from JSON, may be None)
+        time: Timestamp when the event was recorded
+    """
+
+    id: str
+    stream_name: str
+    type: str
+    position: int
+    global_position: int
+    data: dict[str, Any]
+    metadata: dict[str, Any] | None
+    time: datetime
 
 
 class OptimisticConcurrencyError(Exception):
@@ -183,6 +210,131 @@ def write_event(
 
     except Exception as e:
         log.error("Unexpected error while writing event", error=str(e), error_type=type(e).__name__)
+        raise
+
+    finally:
+        client.return_connection(conn)
+
+
+def read_stream(
+    client: MessageDBClient,
+    stream_name: str,
+    position: int = 0,
+    batch_size: int = 1000,
+) -> list[Event]:
+    """Read events from a Message DB stream.
+
+    This function reads events from the specified stream using the Message DB
+    get_stream_messages stored procedure. It deserializes JSON data and returns
+    a list of Event objects in chronological order.
+
+    Args:
+        client: MessageDBClient instance (must be connected)
+        stream_name: Name of the stream to read from (e.g., "agent:v0-{threadId}")
+        position: Starting position to read from (default: 0, reads from beginning)
+        batch_size: Maximum number of events to retrieve (default: 1000)
+
+    Returns:
+        List of Event objects in chronological order. Empty list if no events found.
+
+    Raises:
+        psycopg.Error: If database operation fails
+        RuntimeError: If client is not connected
+        json.JSONDecodeError: If event data or metadata cannot be deserialized
+
+    Example:
+        ```python
+        from messagedb_agent.store import MessageDBClient, MessageDBConfig
+        from messagedb_agent.store.operations import read_stream
+
+        config = MessageDBConfig()
+        with MessageDBClient(config) as client:
+            events = read_stream(
+                client=client,
+                stream_name="agent:v0-thread123",
+                position=0,
+                batch_size=100
+            )
+            for event in events:
+                print(f"Event {event.type} at position {event.position}: {event.data}")
+        ```
+    """
+    log = logger.bind(
+        stream_name=stream_name,
+        position=position,
+        batch_size=batch_size,
+    )
+
+    log.info("Reading events from stream")
+
+    conn = client.get_connection()
+    try:
+        with conn.cursor() as cur:
+            # Call the get_stream_messages stored procedure
+            cur.execute(
+                """
+                SELECT
+                    id,
+                    stream_name,
+                    type,
+                    position,
+                    global_position,
+                    data,
+                    metadata,
+                    time
+                FROM get_stream_messages(
+                    %(stream_name)s,
+                    %(position)s,
+                    %(batch_size)s
+                )
+                """,
+                {
+                    "stream_name": stream_name,
+                    "position": position,
+                    "batch_size": batch_size,
+                },
+            )
+
+            events: list[Event] = []
+            for row in cur.fetchall():
+                # Cast row to dict for type safety
+                event_row = cast(dict[str, Any], row)
+
+                # Deserialize data and metadata
+                # data is already a dict if it came from jsonb column
+                raw_data = event_row["data"]
+                if isinstance(raw_data, dict):
+                    data: dict[str, Any] = cast(dict[str, Any], raw_data)
+                else:
+                    data = cast(dict[str, Any], json.loads(raw_data))
+
+                # metadata might be None
+                metadata: dict[str, Any] | None = None
+                raw_metadata = event_row["metadata"]
+                if raw_metadata is not None:
+                    if isinstance(raw_metadata, dict):
+                        metadata = cast(dict[str, Any], raw_metadata)
+                    else:
+                        metadata = cast(dict[str, Any], json.loads(raw_metadata))
+
+                # Create Event object
+                event = Event(
+                    id=event_row["id"],
+                    stream_name=event_row["stream_name"],
+                    type=event_row["type"],
+                    position=int(event_row["position"]),
+                    global_position=int(event_row["global_position"]),
+                    data=data,
+                    metadata=metadata,
+                    time=event_row["time"],
+                )
+                events.append(event)
+
+            log.info("Successfully read events from stream", event_count=len(events))
+            return events
+
+    except Exception as e:
+        log.error("Error while reading stream", error=str(e), error_type=type(e).__name__)
         raise
 
     finally:

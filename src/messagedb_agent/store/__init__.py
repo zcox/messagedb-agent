@@ -6,11 +6,18 @@ to Message DB (PostgreSQL-based event store).
 """
 
 from messagedb_agent.store.client import MessageDBClient, MessageDBConfig
-from messagedb_agent.store.operations import OptimisticConcurrencyError, write_event
+from messagedb_agent.store.operations import (
+    Event,
+    OptimisticConcurrencyError,
+    read_stream,
+    write_event,
+)
 
 __all__ = [
     "MessageDBClient",
     "MessageDBConfig",
+    "Event",
     "OptimisticConcurrencyError",
+    "read_stream",
     "write_event",
 ]
