@@ -35,7 +35,6 @@ dev = [
     "pytest-cov>=4.1.0",
     "black>=23.0.0",
     "ruff>=0.1.0",
-    "mypy>=1.5.0",
 ]
 
 [project.scripts]
@@ -67,13 +66,12 @@ select = [
     "UP",  # pyupgrade
 ]
 
-[tool.mypy]
-python_version = "3.11"
-warn_return_any = true
-warn_unused_configs = true
-disallow_untyped_defs = true
-disallow_incomplete_defs = true
-check_untyped_defs = true
+[tool.basedpyright]
+pythonVersion = "3.11"
+typeCheckingMode = "strict"
+reportUnusedImport = "error"
+reportUnusedVariable = "error"
+reportUnnecessaryTypeIgnoreComment = "warning"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -84,8 +82,8 @@ addopts = "-v --cov=messagedb_agent --cov-report=term-missing"
 
 [dependency-groups]
 dev = [
+    "basedpyright>=1.31.7",
     "black>=25.9.0",
-    "mypy>=1.18.2",
     "pytest>=8.4.2",
     "pytest-cov>=7.0.0",
     "ruff>=0.14.1",

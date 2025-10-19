@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
    - `uv run ruff check src/ tests/` - Check for issues
    - `uv run ruff check --fix src/ tests/` - Auto-fix issues
    - `uv run black src/ tests/` - Format code
-   - `uv run mypy src/` - Type check
+   - `uv run basedpyright src/` - Type check
    - **Fix any remaining errors** reported by these tools before proceeding
 
 2. **Commit changes to git** when major work is complete:
@@ -92,16 +92,16 @@ uv run python -c "from messagedb_agent.store import MessageDBClient; ..."
 uv run ruff check src/ tests/          # Check for code issues
 uv run ruff check --fix src/ tests/    # Auto-fix issues
 uv run black src/ tests/               # Format code
-uv run mypy src/                       # Type check (src only, not tests)
+uv run basedpyright src/               # Type check (src only, not tests)
 
 # Individual commands
 uv run ruff check src/                 # Ruff linter only
 uv run ruff check --fix src/           # Fix auto-fixable ruff issues
 uv run black src/                      # Black formatter only
-uv run mypy src/                       # Mypy type checker only
+uv run basedpyright src/               # basedpyright type checker only
 ```
 
-**Note**: Always run linting on both `src/` and `tests/` directories. Type checking with mypy is typically only run on `src/` since test files may have looser type requirements.
+**Note**: Always run linting on both `src/` and `tests/` directories. Type checking with basedpyright is typically only run on `src/` since test files may have looser type requirements.
 
 ### Testing
 ```bash
@@ -121,14 +121,14 @@ uv run pytest tests/test_store.py::test_write_event
 ## Code Style Guidelines
 
 - **Line length**: 100 characters
-- **Type hints**: Required on all functions (enforced by mypy)
+- **Type hints**: Required on all functions (enforced by basedpyright)
 - **Type annotations**: Use modern Python 3.10+ syntax (`X | None` not `Optional[X]`, `dict` not `Dict`)
 - **Import order**: stdlib, third-party, local (enforced by ruff's isort)
 - **Docstrings**: Google or NumPy style with examples for public APIs
 
 ### Common Type Issues and Solutions
 
-**psycopg dict_row results**: When using `dict_row` as the row factory, `fetchone()` returns `dict[str, Any] | None` but mypy infers it as `tuple[Any, ...] | None`. Use type casting:
+**psycopg dict_row results**: When using `dict_row` as the row factory, `fetchone()` returns `dict[str, Any] | None` but type checkers may infer it as `tuple[Any, ...] | None`. Use type casting:
 
 ```python
 from typing import Any, cast
@@ -136,7 +136,7 @@ from typing import Any, cast
 # Correct way to handle fetchone() with dict_row
 result = cast(dict[str, Any] | None, cur.fetchone())
 if result is not None:
-    value = result["column_name"]  # Now mypy knows this is a dict
+    value = result["column_name"]  # Now the type checker knows this is a dict
 ```
 
 **Explicit type annotations**: When assigning from `Any` types (like dict values), add explicit type annotations to maintain type safety:
