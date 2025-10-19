@@ -168,12 +168,15 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - Thread ID extraction from stream name
   - 33 comprehensive tests with 95% code coverage
 
-- [ ] **Task 4.4: Implement Tool Arguments projection**
+- [x] **Task 4.4: Implement Tool Arguments projection**
   - Create `src/messagedb_agent/projections/tool_args.py`
-  - Implement `project_to_tool_arguments(events) -> Dict[str, Any]`
+  - Implement `project_to_tool_arguments(events) -> list[dict[str, Any]]`
   - Extract tool call arguments from most recent LLMResponseReceived event
-  - Return dict mapping tool_name to arguments
+  - Return list of tool call dicts (id, name, arguments)
   - Handle case where no tool calls present
+  - Handle both dict and ToolCall dataclass formats
+  - Helper functions: get_tool_call_by_name(), get_all_tool_names(), has_pending_tool_calls(), count_tool_calls()
+  - 28 comprehensive tests with 100% code coverage
 
 - [x] **Task 4.5: Implement Next Step projection**
   - Create `src/messagedb_agent/projections/next_step.py`
@@ -661,14 +664,21 @@ Recommended implementation order for complete system:
 ## Progress Tracking
 
 - Total Tasks: 78
-- Completed: 22 (Tasks 1.1-1.3, 2.1-2.4, 3.1-3.5, 4.1-4.3, 4.5, 5.1-5.4, 10.2)
+- Completed: 23 (Tasks 1.1-1.3, 2.1-2.4, 3.1-3.5, 4.1-4.5, 5.1-5.4, 10.2)
 - In Progress: 0
-- Remaining: 56
-- Completion: 28.2%
+- Remaining: 55
+- Completion: 29.5%
 
 Last Updated: 2025-10-19
 
 **Recent Completions:**
+- Task 4.4: Implement Tool Arguments projection (COMPLETE)
+  - Created project_to_tool_arguments() to extract tool calls from events
+  - Returns list of tool call dicts with id, name, arguments
+  - Helper functions for tool lookup, counting, and checking
+  - Handles both dict and ToolCall dataclass formats
+  - 28 comprehensive tests with 100% code coverage
+  - All 307 unit tests passing
 - Task 4.3: Implement Session State projection (COMPLETE)
   - Created SessionState dataclass and SessionStatus enum
   - Implemented project_to_session_state() to aggregate session statistics
