@@ -346,19 +346,20 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - Updated `src/messagedb_agent/store/operations.py` to use `message_store` schema prefix for functions
   - All Message DB functions are in the `message_store` schema, not `public`
 
-  **IMPORTANT - Known Issue with Container Initialization:**
-  - The Message DB Docker image takes 30-45 seconds to fully initialize
-  - Initialization includes: database creation, schema setup, function installation, indexes, views, privileges
-  - This can cause timeouts in pytest-docker's default wait mechanism
-  - The container DOES work correctly - just needs time to initialize
+  **IMPORTANT - pytest-docker Incompatibility:**
+  - The Message DB Docker image initializes in ~8 seconds (database creation, schema setup, functions, indexes, views)
+  - pytest-docker creates a NEW container with unique project name for each test session
+  - This means every test run gets a fresh database that needs 8 seconds to initialize
+  - pytest-docker's health check mechanism runs DURING initialization, sees partial state, and proceeds before completion
+  - Result: Tests fail with "function acquire_lock does not exist" even though functions exist during health check
 
-  **Current Workaround - Manual Container Startup:**
+  **SOLUTION - Manual Container Startup (REQUIRED):**
   ```bash
   # Start container manually BEFORE running tests:
   docker compose -f docker-compose.test.yml up -d
 
-  # Wait 30-45 seconds for Message DB to finish initialization
-  # You can check logs: docker logs <container-name>
+  # Wait ~8-10 seconds for Message DB to finish initialization
+  # You can check logs: docker compose -f docker-compose.test.yml logs
   # Look for "Done Installing Database" and "database system is ready to accept connections"
 
   # Then run tests (they will connect to the running container):
