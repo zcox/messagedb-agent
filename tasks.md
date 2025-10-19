@@ -208,11 +208,17 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - Code coverage: 80% for ClaudeClient, 78% for GeminiClient
   - All 169 unit tests + 9 integration tests passing
 
-- [ ] **Task 5.4: Define system prompt**
-  - Create `src/messagedb_agent/llm/prompts.py`
-  - Define default system prompt for agent behavior
-  - Make system prompt configurable
-  - Document prompt engineering guidelines
+- [x] **Task 5.4: Define system prompt**
+  - Created `src/messagedb_agent/llm/prompts.py` with comprehensive prompt utilities
+  - Defined `DEFAULT_SYSTEM_PROMPT` for event-sourced agent behavior
+  - Defined `MINIMAL_SYSTEM_PROMPT` for simple use cases
+  - Defined `TOOL_FOCUSED_SYSTEM_PROMPT` emphasizing tool usage
+  - Created `create_system_prompt()` function for customization
+  - Created `get_prompt_for_task()` function for task-specific prompts
+  - Documented comprehensive prompt engineering guidelines in module
+  - Exported all prompts and utilities from llm module
+  - Added 20 comprehensive tests (100% coverage of prompts.py)
+  - All 189 unit tests passing
 
 ## Phase 6: Tool Framework
 
@@ -614,14 +620,23 @@ Recommended implementation order for complete system:
 ## Progress Tracking
 
 - Total Tasks: 78
-- Completed: 12 (Tasks 1.1, 1.2, 1.3, 2.1, 2.2, 2.3, 2.4, 5.1, 5.2, 5.3, 5.3.1, 10.2)
+- Completed: 13 (Tasks 1.1, 1.2, 1.3, 2.1, 2.2, 2.3, 2.4, 5.1, 5.2, 5.3, 5.3.1, 5.4, 10.2)
 - In Progress: 0
-- Remaining: 66
-- Completion: 15.4%
+- Remaining: 65
+- Completion: 16.7%
 
 Last Updated: 2025-10-19
 
 **Recent Completions:**
+- Task 5.4: Define system prompt (COMPLETE - Phase 5 LLM Integration now complete!)
+  - Created comprehensive prompts.py module with 3 default prompts
+  - `DEFAULT_SYSTEM_PROMPT` - Event-sourced agent with tool guidance
+  - `MINIMAL_SYSTEM_PROMPT` - Simple, concise prompt
+  - `TOOL_FOCUSED_SYSTEM_PROMPT` - Emphasizes tool usage
+  - Utilities: `create_system_prompt()` for customization, `get_prompt_for_task()` for presets
+  - Comprehensive prompt engineering guidelines documented in module
+  - 20 tests with 100% coverage of prompts module
+  - All 189 unit tests passing
 - Task 5.3.1: Add Claude model support via AnthropicVertex SDK (COMPLETE)
   - Added `anthropic[vertex]>=0.42.0` dependency
   - Created unified `BaseLLMClient` interface for both Gemini and Claude
