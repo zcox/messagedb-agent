@@ -4,6 +4,14 @@ This module provides the tool registration and execution infrastructure
 for the event-sourced agent system.
 """
 
+from messagedb_agent.tools.executor import (
+    ToolExecutionError,
+    ToolExecutionResult,
+    ToolExecutionTimeoutError,
+    batch_execute_tools,
+    execute_tool,
+    execute_tool_safe,
+)
 from messagedb_agent.tools.registry import (
     Tool,
     ToolError,
@@ -16,6 +24,7 @@ from messagedb_agent.tools.registry import (
 )
 
 __all__ = [
+    # Registry
     "Tool",
     "ToolRegistry",
     "ToolError",
@@ -24,4 +33,11 @@ __all__ = [
     "tool",
     "register_tool",
     "get_tool_metadata",
+    # Executor
+    "ToolExecutionResult",
+    "ToolExecutionError",
+    "ToolExecutionTimeoutError",
+    "execute_tool",
+    "execute_tool_safe",
+    "batch_execute_tools",
 ]
