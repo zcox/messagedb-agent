@@ -1,7 +1,7 @@
-"""Message DB operations for writing and reading events.
+"""Message DB operations for writing and reading messages.
 
-This module provides functions for writing events to and reading events from
-Message DB event streams.
+This module provides functions for writing messages to and reading messages from
+Message DB streams.
 """
 
 import json
@@ -19,18 +19,18 @@ logger = structlog.get_logger(__name__)
 
 
 @dataclass
-class Event:
-    """Represents a single event read from a Message DB stream.
+class Message:
+    """Represents a single message read from a Message DB stream.
 
     Attributes:
-        id: Unique identifier of the event (UUID)
-        stream_name: Name of the stream containing this event
-        type: Event type/name (e.g., "UserMessageAdded")
-        position: Position of the event within its stream
+        id: Unique identifier of the message (UUID)
+        stream_name: Name of the stream containing this message
+        type: Message type/name (e.g., "UserMessageAdded")
+        position: Position of the message within its stream
         global_position: Global position across all streams
-        data: Event payload (deserialized from JSON)
-        metadata: Event metadata (deserialized from JSON, may be None)
-        time: Timestamp when the event was recorded
+        data: Message payload (deserialized from JSON)
+        metadata: Message metadata (deserialized from JSON, may be None)
+        time: Timestamp when the message was recorded
     """
 
     id: str
@@ -80,31 +80,31 @@ class OptimisticConcurrencyError(Exception):
         super().__init__(message)
 
 
-def write_event(
+def write_message(
     client: MessageDBClient,
     stream_name: str,
-    event_type: str,
+    message_type: str,
     data: dict[str, Any],
     metadata: dict[str, Any] | None = None,
     expected_version: int | None = None,
 ) -> int:
-    """Write an event to a Message DB stream.
+    """Write a message to a Message DB stream.
 
-    This function writes a new event to the specified stream using the Message DB
+    This function writes a new message to the specified stream using the Message DB
     write_message stored procedure. It handles JSON serialization, generates a UUID
     for the message, and supports optimistic concurrency control.
 
     Args:
         client: MessageDBClient instance (must be connected)
         stream_name: Name of the stream to write to (e.g., "agent:v0-{threadId}")
-        event_type: Type/name of the event (e.g., "UserMessageAdded")
-        data: Event payload as a dictionary (will be serialized to JSON)
+        message_type: Type/name of the message (e.g., "UserMessageAdded")
+        data: Message payload as a dictionary (will be serialized to JSON)
         metadata: Optional metadata dictionary (will be serialized to JSON)
         expected_version: Optional stream version for optimistic concurrency control.
             If provided, the write will fail if the stream is not at this version.
 
     Returns:
-        Position of the written event in the stream
+        Position of the written message in the stream
 
     Raises:
         OptimisticConcurrencyError: If expected_version is provided and doesn't match
@@ -115,29 +115,29 @@ def write_event(
     Example:
         ```python
         from messagedb_agent.store import MessageDBClient, MessageDBConfig
-        from messagedb_agent.store.operations import write_event
+        from messagedb_agent.store.operations import write_message
 
         config = MessageDBConfig()
         with MessageDBClient(config) as client:
-            position = write_event(
+            position = write_message(
                 client=client,
                 stream_name="agent:v0-thread123",
-                event_type="UserMessageAdded",
+                message_type="UserMessageAdded",
                 data={"message": "Hello, world!", "timestamp": "2025-10-19T10:00:00Z"},
                 metadata={"user_id": "user456", "session_id": "session789"}
             )
-            print(f"Event written at position: {position}")
+            print(f"Message written at position: {position}")
         ```
     """
-    event_id = str(uuid.uuid4())
+    message_id = str(uuid.uuid4())
     log = logger.bind(
         stream_name=stream_name,
-        event_type=event_type,
-        event_id=event_id,
+        message_type=message_type,
+        message_id=message_id,
         expected_version=expected_version,
     )
 
-    log.info("Writing event to stream")
+    log.info("Writing message to stream")
 
     # Serialize data and metadata to JSON
     data_json = json.dumps(data)
@@ -160,9 +160,9 @@ def write_event(
                 )
                 """,
                 {
-                    "id": event_id,
+                    "id": message_id,
                     "stream_name": stream_name,
-                    "type": event_type,
+                    "type": message_type,
                     "data": data_json,
                     "metadata": metadata_json,
                     "expected_version": expected_version,
@@ -179,7 +179,7 @@ def write_event(
         # Commit the transaction so the write is persisted
         conn.commit()
 
-        log.info("Event written successfully", position=position)
+        log.info("Message written successfully", position=position)
         return position
 
     except psycopg_errors.RaiseException as e:
@@ -211,11 +211,13 @@ def write_event(
             ) from e
         else:
             # Some other database error
-            log.error("Database error while writing event", error=str(e))
+            log.error("Database error while writing message", error=str(e))
             raise
 
     except Exception as e:
-        log.error("Unexpected error while writing event", error=str(e), error_type=type(e).__name__)
+        log.error(
+            "Unexpected error while writing message", error=str(e), error_type=type(e).__name__
+        )
         raise
 
     finally:
@@ -227,26 +229,26 @@ def read_stream(
     stream_name: str,
     position: int = 0,
     batch_size: int = 1000,
-) -> list[Event]:
-    """Read events from a Message DB stream.
+) -> list[Message]:
+    """Read messages from a Message DB stream.
 
-    This function reads events from the specified stream using the Message DB
+    This function reads messages from the specified stream using the Message DB
     get_stream_messages stored procedure. It deserializes JSON data and returns
-    a list of Event objects in chronological order.
+    a list of Message objects in chronological order.
 
     Args:
         client: MessageDBClient instance (must be connected)
         stream_name: Name of the stream to read from (e.g., "agent:v0-{threadId}")
         position: Starting position to read from (default: 0, reads from beginning)
-        batch_size: Maximum number of events to retrieve (default: 1000)
+        batch_size: Maximum number of messages to retrieve (default: 1000)
 
     Returns:
-        List of Event objects in chronological order. Empty list if no events found.
+        List of Message objects in chronological order. Empty list if no messages found.
 
     Raises:
         psycopg.Error: If database operation fails
         RuntimeError: If client is not connected
-        json.JSONDecodeError: If event data or metadata cannot be deserialized
+        json.JSONDecodeError: If message data or metadata cannot be deserialized
 
     Example:
         ```python
@@ -255,14 +257,14 @@ def read_stream(
 
         config = MessageDBConfig()
         with MessageDBClient(config) as client:
-            events = read_stream(
+            messages = read_stream(
                 client=client,
                 stream_name="agent:v0-thread123",
                 position=0,
                 batch_size=100
             )
-            for event in events:
-                print(f"Event {event.type} at position {event.position}: {event.data}")
+            for message in messages:
+                print(f"Message {message.type} at position {message.position}: {message.data}")
         ```
     """
     log = logger.bind(
@@ -271,7 +273,7 @@ def read_stream(
         batch_size=batch_size,
     )
 
-    log.info("Reading events from stream")
+    log.info("Reading messages from stream")
 
     conn = client.get_connection()
     try:
@@ -302,14 +304,14 @@ def read_stream(
                 },
             )
 
-            events: list[Event] = []
+            messages: list[Message] = []
             for row in cur.fetchall():
                 # Cast row to dict for type safety
-                event_row = cast(dict[str, Any], row)
+                message_row = cast(dict[str, Any], row)
 
                 # Deserialize data and metadata
                 # data is already a dict if it came from jsonb column
-                raw_data = event_row["data"]
+                raw_data = message_row["data"]
                 if isinstance(raw_data, dict):
                     data: dict[str, Any] = cast(dict[str, Any], raw_data)
                 else:
@@ -317,31 +319,31 @@ def read_stream(
 
                 # metadata might be None
                 metadata: dict[str, Any] | None = None
-                raw_metadata = event_row["metadata"]
+                raw_metadata = message_row["metadata"]
                 if raw_metadata is not None:
                     if isinstance(raw_metadata, dict):
                         metadata = cast(dict[str, Any], raw_metadata)
                     else:
                         metadata = cast(dict[str, Any], json.loads(raw_metadata))
 
-                # Create Event object
-                event = Event(
-                    id=event_row["id"],
-                    stream_name=event_row["stream_name"],
-                    type=event_row["type"],
-                    position=int(event_row["position"]),
-                    global_position=int(event_row["global_position"]),
+                # Create Message object
+                message = Message(
+                    id=message_row["id"],
+                    stream_name=message_row["stream_name"],
+                    type=message_row["type"],
+                    position=int(message_row["position"]),
+                    global_position=int(message_row["global_position"]),
                     data=data,
                     metadata=metadata,
-                    time=event_row["time"],
+                    time=message_row["time"],
                 )
-                events.append(event)
+                messages.append(message)
 
         # Commit the transaction to release locks
         conn.commit()
 
-        log.info("Successfully read events from stream", event_count=len(events))
-        return events
+        log.info("Successfully read messages from stream", message_count=len(messages))
+        return messages
 
     except Exception as e:
         log.error("Error while reading stream", error=str(e), error_type=type(e).__name__)

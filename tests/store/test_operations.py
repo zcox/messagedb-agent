@@ -1,7 +1,7 @@
-"""Tests for Message DB operations (write_event and read_stream).
+"""Tests for Message DB operations (write_message and read_stream).
 
 These tests use a real Message DB container managed by pytest-docker
-and verify the complete read/write lifecycle of events.
+and verify the complete read/write lifecycle of messages.
 """
 
 import uuid
@@ -13,7 +13,7 @@ from messagedb_agent.store import (
     MessageDBClient,
     OptimisticConcurrencyError,
     read_stream,
-    write_event,
+    write_message,
 )
 
 
@@ -24,47 +24,47 @@ def test_stream_name() -> str:
     return f"agent:v0-{thread_id}"
 
 
-class TestWriteEvent:
-    """Tests for write_event function."""
+class TestWriteMessage:
+    """Tests for write_message function."""
 
-    def test_write_single_event(
+    def test_write_single_message(
         self, messagedb_client: MessageDBClient, test_stream_name: str
     ) -> None:
-        """Test writing a single event to a stream."""
+        """Test writing a single message to a stream."""
         with messagedb_client:
-            position = write_event(
+            position = write_message(
                 client=messagedb_client,
                 stream_name=test_stream_name,
-                event_type="UserMessageAdded",
+                message_type="UserMessageAdded",
                 data={"message": "Hello, world!", "timestamp": "2025-10-19T10:00:00Z"},
                 metadata={"user_id": "user123"},
             )
 
-            assert position == 0  # First event is at position 0
+            assert position == 0  # First message is at position 0
 
-    def test_write_multiple_events(
+    def test_write_multiple_messages(
         self, messagedb_client: MessageDBClient, test_stream_name: str
     ) -> None:
-        """Test writing multiple events to the same stream."""
+        """Test writing multiple messages to the same stream."""
         with messagedb_client:
-            pos1 = write_event(
+            pos1 = write_message(
                 client=messagedb_client,
                 stream_name=test_stream_name,
-                event_type="SessionStarted",
+                message_type="SessionStarted",
                 data={"thread_id": "thread123"},
             )
 
-            pos2 = write_event(
+            pos2 = write_message(
                 client=messagedb_client,
                 stream_name=test_stream_name,
-                event_type="UserMessageAdded",
+                message_type="UserMessageAdded",
                 data={"message": "First message"},
             )
 
-            pos3 = write_event(
+            pos3 = write_message(
                 client=messagedb_client,
                 stream_name=test_stream_name,
-                event_type="UserMessageAdded",
+                message_type="UserMessageAdded",
                 data={"message": "Second message"},
             )
 
@@ -72,25 +72,25 @@ class TestWriteEvent:
             assert pos2 == 1
             assert pos3 == 2
 
-    def test_write_event_without_metadata(
+    def test_write_message_without_metadata(
         self, messagedb_client: MessageDBClient, test_stream_name: str
     ) -> None:
-        """Test writing an event without metadata."""
+        """Test writing a message without metadata."""
         with messagedb_client:
-            position = write_event(
+            position = write_message(
                 client=messagedb_client,
                 stream_name=test_stream_name,
-                event_type="SessionStarted",
+                message_type="SessionStarted",
                 data={"thread_id": "thread123"},
                 metadata=None,
             )
 
             assert position == 0
 
-    def test_write_event_with_complex_data(
+    def test_write_message_with_complex_data(
         self, messagedb_client: MessageDBClient, test_stream_name: str
     ) -> None:
-        """Test writing an event with complex nested data."""
+        """Test writing a message with complex nested data."""
         with messagedb_client:
             complex_data = {
                 "user_message": "What's the weather?",
@@ -105,10 +105,10 @@ class TestWriteEvent:
                 "token_usage": {"prompt": 100, "completion": 50, "total": 150},
             }
 
-            position = write_event(
+            position = write_message(
                 client=messagedb_client,
                 stream_name=test_stream_name,
-                event_type="LLMResponseReceived",
+                message_type="LLMResponseReceived",
                 data=complex_data,
             )
 
@@ -119,19 +119,19 @@ class TestWriteEvent:
     ) -> None:
         """Test successful optimistic concurrency control."""
         with messagedb_client:
-            # Write first event without OCC
-            write_event(
+            # Write first message without OCC
+            write_message(
                 client=messagedb_client,
                 stream_name=test_stream_name,
-                event_type="SessionStarted",
+                message_type="SessionStarted",
                 data={"thread_id": "thread123"},
             )
 
-            # Write second event with correct expected_version
-            position = write_event(
+            # Write second message with correct expected_version
+            position = write_message(
                 client=messagedb_client,
                 stream_name=test_stream_name,
-                event_type="UserMessageAdded",
+                message_type="UserMessageAdded",
                 data={"message": "Hello"},
                 expected_version=0,  # Stream is at version 0 after first write
             )
@@ -143,20 +143,20 @@ class TestWriteEvent:
     ) -> None:
         """Test optimistic concurrency control failure."""
         with messagedb_client:
-            # Write first event
-            write_event(
+            # Write first message
+            write_message(
                 client=messagedb_client,
                 stream_name=test_stream_name,
-                event_type="SessionStarted",
+                message_type="SessionStarted",
                 data={"thread_id": "thread123"},
             )
 
             # Try to write with wrong expected_version
             with pytest.raises(OptimisticConcurrencyError) as exc_info:
-                write_event(
+                write_message(
                     client=messagedb_client,
                     stream_name=test_stream_name,
-                    event_type="UserMessageAdded",
+                    message_type="UserMessageAdded",
                     data={"message": "Hello"},
                     expected_version=5,  # Wrong version
                 )
@@ -164,7 +164,7 @@ class TestWriteEvent:
             error = exc_info.value
             assert error.stream_name == test_stream_name
             assert error.expected_version == 5
-            # actual_version should be 0 (position of last event)
+            # actual_version should be 0 (position of last message)
             assert error.actual_version == 0
 
     def test_optimistic_concurrency_empty_stream_success(
@@ -172,11 +172,11 @@ class TestWriteEvent:
     ) -> None:
         """Test writing to empty stream with expected_version=-1 succeeds."""
         with messagedb_client:
-            # Write first event with expected_version=-1 (stream must be empty)
-            position = write_event(
+            # Write first message with expected_version=-1 (stream must be empty)
+            position = write_message(
                 client=messagedb_client,
                 stream_name=test_stream_name,
-                event_type="SessionStarted",
+                message_type="SessionStarted",
                 data={"thread_id": "thread123"},
                 expected_version=-1,  # Stream must be empty
             )
@@ -188,20 +188,20 @@ class TestWriteEvent:
     ) -> None:
         """Test writing to non-empty stream with expected_version=-1 fails."""
         with messagedb_client:
-            # Write first event without OCC
-            write_event(
+            # Write first message without OCC
+            write_message(
                 client=messagedb_client,
                 stream_name=test_stream_name,
-                event_type="SessionStarted",
+                message_type="SessionStarted",
                 data={"thread_id": "thread123"},
             )
 
             # Try to write with expected_version=-1 (but stream is not empty)
             with pytest.raises(OptimisticConcurrencyError) as exc_info:
-                write_event(
+                write_message(
                     client=messagedb_client,
                     stream_name=test_stream_name,
-                    event_type="UserMessageAdded",
+                    message_type="UserMessageAdded",
                     data={"message": "Hello"},
                     expected_version=-1,  # Stream must be empty, but it's not
                 )
@@ -209,7 +209,7 @@ class TestWriteEvent:
             error = exc_info.value
             assert error.stream_name == test_stream_name
             assert error.expected_version == -1
-            # actual_version should be 0 (position of last event)
+            # actual_version should be 0 (position of last message)
             assert error.actual_version == 0
 
 
@@ -221,167 +221,169 @@ class TestReadStream:
     ) -> None:
         """Test reading from an empty stream."""
         with messagedb_client:
-            events = read_stream(
+            messages = read_stream(
                 client=messagedb_client,
                 stream_name=test_stream_name,
             )
 
-            assert events == []
+            assert messages == []
 
-    def test_read_single_event(
+    def test_read_single_message(
         self, messagedb_client: MessageDBClient, test_stream_name: str
     ) -> None:
-        """Test reading a single event from a stream."""
+        """Test reading a single message from a stream."""
         with messagedb_client:
-            # Write an event
-            event_data = {
+            # Write a message
+            message_data = {
                 "message": "Hello, world!",
                 "timestamp": "2025-10-19T10:00:00Z",
             }
-            event_metadata = {"user_id": "user123"}
+            message_metadata = {"user_id": "user123"}
 
-            write_event(
+            write_message(
                 client=messagedb_client,
                 stream_name=test_stream_name,
-                event_type="UserMessageAdded",
-                data=event_data,
-                metadata=event_metadata,
+                message_type="UserMessageAdded",
+                data=message_data,
+                metadata=message_metadata,
             )
 
-            # Read the event
-            events = read_stream(
+            # Read the message
+            messages = read_stream(
                 client=messagedb_client,
                 stream_name=test_stream_name,
             )
 
-            assert len(events) == 1
-            event = events[0]
+            assert len(messages) == 1
+            message = messages[0]
 
-            assert event.stream_name == test_stream_name
-            assert event.type == "UserMessageAdded"
-            assert event.position == 0
-            assert event.data == event_data
-            assert event.metadata == event_metadata
-            assert isinstance(event.time, datetime)
-            assert isinstance(event.id, str)
-            assert isinstance(event.global_position, int)
+            assert message.stream_name == test_stream_name
+            assert message.type == "UserMessageAdded"
+            assert message.position == 0
+            assert message.data == message_data
+            assert message.metadata == message_metadata
+            assert isinstance(message.time, datetime)
+            assert isinstance(message.id, str)
+            assert isinstance(message.global_position, int)
 
-    def test_read_multiple_events(
+    def test_read_multiple_messages(
         self, messagedb_client: MessageDBClient, test_stream_name: str
     ) -> None:
-        """Test reading multiple events from a stream."""
+        """Test reading multiple messages from a stream."""
         with messagedb_client:
-            # Write multiple events
-            write_event(
+            # Write multiple messages
+            write_message(
                 client=messagedb_client,
                 stream_name=test_stream_name,
-                event_type="SessionStarted",
+                message_type="SessionStarted",
                 data={"thread_id": "thread123"},
             )
 
-            write_event(
+            write_message(
                 client=messagedb_client,
                 stream_name=test_stream_name,
-                event_type="UserMessageAdded",
+                message_type="UserMessageAdded",
                 data={"message": "First message"},
             )
 
-            write_event(
+            write_message(
                 client=messagedb_client,
                 stream_name=test_stream_name,
-                event_type="UserMessageAdded",
+                message_type="UserMessageAdded",
                 data={"message": "Second message"},
             )
 
-            # Read all events
-            events = read_stream(
+            # Read all messages
+            messages = read_stream(
                 client=messagedb_client,
                 stream_name=test_stream_name,
             )
 
-            assert len(events) == 3
-            assert events[0].type == "SessionStarted"
-            assert events[0].position == 0
-            assert events[1].type == "UserMessageAdded"
-            assert events[1].position == 1
-            assert events[1].data == {"message": "First message"}
-            assert events[2].type == "UserMessageAdded"
-            assert events[2].position == 2
-            assert events[2].data == {"message": "Second message"}
+            assert len(messages) == 3
+            assert messages[0].type == "SessionStarted"
+            assert messages[0].position == 0
+            assert messages[1].type == "UserMessageAdded"
+            assert messages[1].position == 1
+            assert messages[1].data == {"message": "First message"}
+            assert messages[2].type == "UserMessageAdded"
+            assert messages[2].position == 2
+            assert messages[2].data == {"message": "Second message"}
 
     def test_read_from_position(
         self, messagedb_client: MessageDBClient, test_stream_name: str
     ) -> None:
         """Test reading from a specific position."""
         with messagedb_client:
-            # Write multiple events
+            # Write multiple messages
             for i in range(5):
-                write_event(
+                write_message(
                     client=messagedb_client,
                     stream_name=test_stream_name,
-                    event_type="UserMessageAdded",
+                    message_type="UserMessageAdded",
                     data={"message": f"Message {i}"},
                 )
 
             # Read from position 2
-            events = read_stream(client=messagedb_client, stream_name=test_stream_name, position=2)
+            messages = read_stream(
+                client=messagedb_client, stream_name=test_stream_name, position=2
+            )
 
-            assert len(events) == 3  # Positions 2, 3, 4
-            assert events[0].position == 2
-            assert events[0].data == {"message": "Message 2"}
-            assert events[1].position == 3
-            assert events[2].position == 4
+            assert len(messages) == 3  # Positions 2, 3, 4
+            assert messages[0].position == 2
+            assert messages[0].data == {"message": "Message 2"}
+            assert messages[1].position == 3
+            assert messages[2].position == 4
 
     def test_read_with_batch_size(
         self, messagedb_client: MessageDBClient, test_stream_name: str
     ) -> None:
         """Test reading with a batch size limit."""
         with messagedb_client:
-            # Write 10 events
+            # Write 10 messages
             for i in range(10):
-                write_event(
+                write_message(
                     client=messagedb_client,
                     stream_name=test_stream_name,
-                    event_type="UserMessageAdded",
+                    message_type="UserMessageAdded",
                     data={"message": f"Message {i}"},
                 )
 
             # Read with batch size of 5
-            events = read_stream(
+            messages = read_stream(
                 client=messagedb_client, stream_name=test_stream_name, batch_size=5
             )
 
-            assert len(events) == 5
-            assert events[0].position == 0
-            assert events[4].position == 4
+            assert len(messages) == 5
+            assert messages[0].position == 0
+            assert messages[4].position == 4
 
-    def test_read_event_without_metadata(
+    def test_read_message_without_metadata(
         self, messagedb_client: MessageDBClient, test_stream_name: str
     ) -> None:
-        """Test reading an event that has no metadata."""
+        """Test reading a message that has no metadata."""
         with messagedb_client:
-            # Write event without metadata
-            write_event(
+            # Write message without metadata
+            write_message(
                 client=messagedb_client,
                 stream_name=test_stream_name,
-                event_type="SessionStarted",
+                message_type="SessionStarted",
                 data={"thread_id": "thread123"},
                 metadata=None,
             )
 
-            # Read the event
-            events = read_stream(
+            # Read the message
+            messages = read_stream(
                 client=messagedb_client,
                 stream_name=test_stream_name,
             )
 
-            assert len(events) == 1
-            assert events[0].metadata is None
+            assert len(messages) == 1
+            assert messages[0].metadata is None
 
-    def test_read_event_with_complex_data(
+    def test_read_message_with_complex_data(
         self, messagedb_client: MessageDBClient, test_stream_name: str
     ) -> None:
-        """Test reading an event with complex nested data."""
+        """Test reading a message with complex nested data."""
         with messagedb_client:
             complex_data = {
                 "user_message": "What's the weather?",
@@ -396,25 +398,25 @@ class TestReadStream:
                 "token_usage": {"prompt": 100, "completion": 50, "total": 150},
             }
 
-            write_event(
+            write_message(
                 client=messagedb_client,
                 stream_name=test_stream_name,
-                event_type="LLMResponseReceived",
+                message_type="LLMResponseReceived",
                 data=complex_data,
             )
 
-            # Read the event
-            events = read_stream(
+            # Read the message
+            messages = read_stream(
                 client=messagedb_client,
                 stream_name=test_stream_name,
             )
 
-            assert len(events) == 1
-            assert events[0].data == complex_data
+            assert len(messages) == 1
+            assert messages[0].data == complex_data
 
 
 class TestWriteReadIntegration:
-    """Integration tests for write_event and read_stream together."""
+    """Integration tests for write_message and read_stream together."""
 
     def test_write_and_read_lifecycle(
         self, messagedb_client: MessageDBClient, test_stream_name: str
@@ -423,53 +425,53 @@ class TestWriteReadIntegration:
         with messagedb_client:
             # Simulate a simple agent session
             # 1. Start session
-            write_event(
+            write_message(
                 client=messagedb_client,
                 stream_name=test_stream_name,
-                event_type="SessionStarted",
+                message_type="SessionStarted",
                 data={"thread_id": test_stream_name.split("-")[1]},
             )
 
             # 2. User sends message
-            write_event(
+            write_message(
                 client=messagedb_client,
                 stream_name=test_stream_name,
-                event_type="UserMessageAdded",
+                message_type="UserMessageAdded",
                 data={"message": "What's 2+2?"},
             )
 
             # 3. LLM responds
-            write_event(
+            write_message(
                 client=messagedb_client,
                 stream_name=test_stream_name,
-                event_type="LLMResponseReceived",
+                message_type="LLMResponseReceived",
                 data={"response": "2+2 equals 4", "tool_calls": []},
             )
 
             # 4. Session completes
-            write_event(
+            write_message(
                 client=messagedb_client,
                 stream_name=test_stream_name,
-                event_type="SessionCompleted",
+                message_type="SessionCompleted",
                 data={"reason": "success"},
             )
 
-            # Read all events and verify
-            events = read_stream(
+            # Read all messages and verify
+            messages = read_stream(
                 client=messagedb_client,
                 stream_name=test_stream_name,
             )
 
-            assert len(events) == 4
-            assert events[0].type == "SessionStarted"
-            assert events[1].type == "UserMessageAdded"
-            assert events[2].type == "LLMResponseReceived"
-            assert events[3].type == "SessionCompleted"
+            assert len(messages) == 4
+            assert messages[0].type == "SessionStarted"
+            assert messages[1].type == "UserMessageAdded"
+            assert messages[2].type == "LLMResponseReceived"
+            assert messages[3].type == "SessionCompleted"
 
             # Verify ordering
-            for i, event in enumerate(events):
-                assert event.position == i
+            for i, message in enumerate(messages):
+                assert message.position == i
 
             # Verify global_position is increasing
-            for i in range(1, len(events)):
-                assert events[i].global_position > events[i - 1].global_position
+            for i in range(1, len(messages)):
+                assert messages[i].global_position > messages[i - 1].global_position

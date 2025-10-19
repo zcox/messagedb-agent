@@ -1,16 +1,16 @@
 """
-Event store integration with Message DB.
+Message store integration with Message DB.
 
-This module provides the client and utilities for reading and writing events
-to Message DB (PostgreSQL-based event store).
+This module provides the client and utilities for reading and writing messages
+to Message DB (PostgreSQL-based message store).
 """
 
 from messagedb_agent.store.client import MessageDBClient, MessageDBConfig
 from messagedb_agent.store.operations import (
-    Event,
+    Message,
     OptimisticConcurrencyError,
     read_stream,
-    write_event,
+    write_message,
 )
 from messagedb_agent.store.stream import (
     build_stream_name,
@@ -21,10 +21,10 @@ from messagedb_agent.store.stream import (
 __all__ = [
     "MessageDBClient",
     "MessageDBConfig",
-    "Event",
+    "Message",
     "OptimisticConcurrencyError",
     "read_stream",
-    "write_event",
+    "write_message",
     "build_stream_name",
     "generate_thread_id",
     "parse_stream_name",
