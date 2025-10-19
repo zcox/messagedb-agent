@@ -306,12 +306,19 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - 54 comprehensive tests with 95% code coverage
   - All tests passing, linting/formatting/type checking clean
 
-- [ ] **Task 6.4: Convert tools to LLM function declarations**
-  - Create `src/messagedb_agent/tools/schema.py`
-  - Implement `tools_to_function_declarations(tools) -> List[Dict]`
-  - Convert Tool objects to Vertex AI function calling format
-  - Include name, description, and parameters schema
-  - Handle required vs optional parameters
+- [x] **Task 6.4: Convert tools to LLM function declarations**
+  - Created `src/messagedb_agent/tools/schema.py` with 7 utility functions
+  - Implemented tool_to_function_declaration() - converts single Tool to ToolDeclaration
+  - Implemented tools_to_function_declarations() - converts list of Tools
+  - Implemented registry_to_function_declarations() - converts entire ToolRegistry
+  - Implemented get_tool_names_from_declarations() - extracts tool names
+  - Implemented validate_function_declaration() - validates ToolDeclaration structure
+  - Implemented filter_tools_by_name() - filters declarations by name
+  - Implemented merge_schema_properties() - merges additional schema properties
+  - Converts to ToolDeclaration format (unified for both Gemini and Claude)
+  - Preserves parameter schemas exactly, including required vs optional parameters
+  - Created comprehensive test suite in tests/tools/test_schema.py (42 tests, 94% coverage)
+  - All tests passing, linting/formatting/type checking clean
 
 ## Phase 7: Processing Engine
 
@@ -680,14 +687,23 @@ Recommended implementation order for complete system:
 ## Progress Tracking
 
 - Total Tasks: 78
-- Completed: 26 (Tasks 1.1-1.3, 2.1-2.4, 3.1-3.5, 4.1-4.5, 5.1-5.4, 6.1-6.3, 10.2)
+- Completed: 27 (Tasks 1.1-1.3, 2.1-2.4, 3.1-3.5, 4.1-4.5, 5.1-5.4, 6.1-6.4, 10.2)
 - In Progress: 0
-- Remaining: 52
-- Completion: 33.3%
+- Remaining: 51
+- Completion: 34.6%
 
 Last Updated: 2025-10-19
 
 **Recent Completions:**
+- Task 6.4: Convert tools to LLM function declarations (COMPLETE - Phase 6 complete! ✅)
+  - Created schema.py with 7 utility functions for Tool→ToolDeclaration conversion
+  - tool_to_function_declaration(), tools_to_function_declarations(), registry_to_function_declarations()
+  - get_tool_names_from_declarations(), validate_function_declaration(), filter_tools_by_name()
+  - merge_schema_properties() for extending tool schemas
+  - Converts to unified ToolDeclaration format (works for both Gemini and Claude)
+  - Preserves parameter schemas exactly, handles required vs optional parameters
+  - 42 tests with 94% coverage, all passing
+  - Phase 6 (Tool Framework) now complete - all tasks 6.1-6.4 done!
 - Task 6.3: Create example builtin tools (COMPLETE)
   - Implemented get_current_time(), echo(), and calculate() tools
   - calculate() uses safe AST parsing (NO eval()) for security
