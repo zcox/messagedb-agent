@@ -147,14 +147,15 @@ def write_event(
     try:
         with conn.cursor() as cur:
             # Call the write_message stored procedure
+            # Note: Message DB functions are in the message_store schema
             cur.execute(
                 """
-                SELECT write_message(
+                SELECT message_store.write_message(
                     %(id)s,
                     %(stream_name)s,
                     %(type)s,
-                    %(data)s::jsonb,
-                    %(metadata)s::jsonb,
+                    %(data)s,
+                    %(metadata)s,
                     %(expected_version)s
                 )
                 """,
@@ -271,6 +272,7 @@ def read_stream(
     try:
         with conn.cursor() as cur:
             # Call the get_stream_messages stored procedure
+            # Note: Message DB functions are in the message_store schema
             cur.execute(
                 """
                 SELECT
@@ -282,7 +284,7 @@ def read_stream(
                     data,
                     metadata,
                     time
-                FROM get_stream_messages(
+                FROM message_store.get_stream_messages(
                     %(stream_name)s,
                     %(position)s,
                     %(batch_size)s

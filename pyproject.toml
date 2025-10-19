@@ -86,5 +86,6 @@ dev = [
     "black>=25.9.0",
     "pytest>=8.4.2",
     "pytest-cov>=7.0.0",
+    "pytest-docker>=3.2.3",
     "ruff>=0.14.1",
 ]

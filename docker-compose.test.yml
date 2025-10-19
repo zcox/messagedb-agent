@@ -1,0 +1,14 @@
+services:
+  messagedb:
+    image: articulate/message-db:1.2.2
+    ports:
+      - "5433:5432"  # Use 5433 externally to avoid conflicts with local postgres
+    environment:
+      POSTGRES_PASSWORD: message_store_password
+      # Don't set POSTGRES_USER - let the image use default postgres user
+      # The message-db install script will create message_store user
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10

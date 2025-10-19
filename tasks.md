@@ -333,6 +333,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
     - Tool registry with test tools
 
 - [ ] **Task 10.2: Setup Message DB test container**
+  - Use https://hub.docker.com/r/articulate/message-db or something similar for the Message DB docker image
   - Create `docker-compose.test.yml`
   - Configure PostgreSQL with Message DB extension
   - Add pytest fixture to start/stop container
