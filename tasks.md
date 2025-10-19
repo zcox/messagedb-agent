@@ -133,13 +133,17 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
 ## Phase 4: Projection Framework
 
 ### 4. Projection Functions
-- [ ] **Task 4.1: Create projection base infrastructure**
+- [x] **Task 4.1: Create projection base infrastructure**
   - Create `src/messagedb_agent/projections/base.py`
   - Define ProjectionFunction type: `Callable[[List[BaseEvent]], T]`
   - Create ProjectionResult generic type for typed projection outputs
   - Document projection purity requirements in docstrings
+  - Created ProjectionFunction[T] type alias for type-safe projections
+  - Created ProjectionResult[T] dataclass with metadata (value, event_count, last_position)
+  - Implemented project_with_metadata() helper and compose_projections() utility
+  - Added 20 comprehensive tests with 100% coverage
 
-- [ ] **Task 4.2: Implement LLM Context projection**
+- [x] **Task 4.2: Implement LLM Context projection**
   - Create `src/messagedb_agent/projections/llm_context.py`
   - Implement `project_to_llm_context(events) -> List[Message]` function
   - Convert UserMessageAdded → user message
@@ -147,6 +151,11 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - Convert ToolExecutionCompleted → tool result message
   - Skip system/metadata events in context
   - Return messages in chronological order suitable for Vertex AI API
+  - Created projection that converts events to Message objects for LLM calls
+  - Added helper functions: get_last_user_message(), count_conversation_turns()
+  - Handles malformed event data gracefully with proper error handling
+  - Added 13 comprehensive tests with 88% code coverage
+  - Proper type annotations and cast usage for basedpyright compliance
 
 - [ ] **Task 4.3: Implement Session State projection**
   - Create `src/messagedb_agent/projections/session_state.py`
@@ -643,14 +652,27 @@ Recommended implementation order for complete system:
 ## Progress Tracking
 
 - Total Tasks: 78
-- Completed: 18 (Tasks 1.1-1.3, 2.1-2.4, 3.1-3.5, 5.1-5.4, 10.2)
+- Completed: 20 (Tasks 1.1-1.3, 2.1-2.4, 3.1-3.5, 4.1-4.2, 5.1-5.4, 10.2)
 - In Progress: 0
-- Remaining: 60
-- Completion: 23.1%
+- Remaining: 58
+- Completion: 25.6%
 
 Last Updated: 2025-10-19
 
 **Recent Completions:**
+- Task 4.2: Implement LLM Context projection (COMPLETE)
+  - Created project_to_llm_context() function that converts events to Message objects
+  - Converts UserMessageAdded, LLMResponseReceived, ToolExecutionCompleted events
+  - Filters out system/metadata events not relevant to LLM context
+  - Added get_last_user_message() and count_conversation_turns() helper functions
+  - 13 comprehensive tests with 88% code coverage
+  - All type checking passed with proper type annotations
+- Task 4.1: Create projection base infrastructure (COMPLETE)
+  - Created ProjectionFunction[T] type alias for type-safe projection functions
+  - Created ProjectionResult[T] dataclass wrapping results with metadata
+  - Implemented project_with_metadata() and compose_projections() utilities
+  - 20 comprehensive tests with 100% code coverage
+  - All linting, formatting, and type checking passed
 - Phase 3: Event Schema and Types (COMPLETE - All 5 tasks done! ✅)
   - Task 3.1: Base event structure with BaseEvent and EventData classes
   - Task 3.2: User event types (UserMessageAdded, SessionTerminationRequested)

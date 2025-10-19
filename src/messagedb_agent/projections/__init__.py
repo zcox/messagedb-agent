@@ -11,7 +11,7 @@ Key Concepts:
 
 Available Projections:
     - Base infrastructure (ProjectionFunction, ProjectionResult)
-    - LLM Context projection (coming in Task 4.2)
+    - LLM Context projection (project_to_llm_context)
     - Session State projection (coming in Task 4.3)
     - Tool Arguments projection (coming in Task 4.4)
     - Next Step projection (coming in Task 4.5)
@@ -36,10 +36,20 @@ from messagedb_agent.projections.base import (
     compose_projections,
     project_with_metadata,
 )
+from messagedb_agent.projections.llm_context import (
+    count_conversation_turns,
+    get_last_user_message,
+    project_to_llm_context,
+)
 
 __all__ = [
+    # Base infrastructure
     "ProjectionFunction",
     "ProjectionResult",
     "project_with_metadata",
     "compose_projections",
+    # LLM Context projection
+    "project_to_llm_context",
+    "get_last_user_message",
+    "count_conversation_turns",
 ]
