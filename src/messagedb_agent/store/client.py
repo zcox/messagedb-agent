@@ -5,7 +5,6 @@ a PostgreSQL-based event store.
 """
 
 import os
-from typing import Optional
 
 import structlog
 from psycopg import Connection
@@ -23,11 +22,11 @@ class MessageDBConfig:
 
     def __init__(
         self,
-        host: Optional[str] = None,
-        port: Optional[int] = None,
-        database: Optional[str] = None,
-        user: Optional[str] = None,
-        password: Optional[str] = None,
+        host: str | None = None,
+        port: int | None = None,
+        database: str | None = None,
+        user: str | None = None,
+        password: str | None = None,
         min_size: int = 2,
         max_size: int = 10,
     ) -> None:
@@ -111,7 +110,7 @@ class MessageDBClient:
         """
         self.config = config
         self.config.validate()
-        self._pool: Optional[ConnectionPool] = None
+        self._pool: ConnectionPool | None = None
         self._logger = logger.bind(
             db_host=config.host,
             db_port=config.port,
