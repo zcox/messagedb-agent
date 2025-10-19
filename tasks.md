@@ -154,11 +154,15 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
 ## Phase 5: LLM Integration
 
 ### 5. Vertex AI Integration
-- [ ] **Task 5.1: Setup Vertex AI client**
+- [x] **Task 5.1: Setup Vertex AI client**
   - Create `src/messagedb_agent/llm/client.py`
   - Initialize Vertex AI using google.auth.default() for ADC
   - Configure from environment variables: GCP_PROJECT, GCP_LOCATION, MODEL_NAME (eg gemini-2.5-pro or claude-sonnet-4-5@20250929)
   - Create wrapper for unified interface regardless of model choice
+  - Created VertexAIClient class with ADC authentication support
+  - Supports both Gemini and Claude models via Vertex AI
+  - Added comprehensive docstrings and type hints
+  - All tests passing, linting clean
 
 - [ ] **Task 5.2: Implement message formatting**
   - Create `src/messagedb_agent/llm/format.py`
@@ -583,21 +587,27 @@ Recommended implementation order for complete system:
 ## Progress Tracking
 
 - Total Tasks: 77
-- Completed: 8 (Tasks 1.1, 1.2, 1.3, 2.1, 2.2, 2.3, 2.4, 10.2)
+- Completed: 9 (Tasks 1.1, 1.2, 1.3, 2.1, 2.2, 2.3, 2.4, 5.1, 10.2)
 - In Progress: 0
-- Remaining: 69
-- Completion: 10.4%
+- Remaining: 68
+- Completion: 11.7%
 
 Last Updated: 2025-10-19
 
 **Recent Completions:**
+- Task 5.1: Setup Vertex AI client
+  - Created `VertexAIClient` class with ADC authentication support
+  - Supports both Gemini and Claude models via Vertex AI API
+  - Uses Application Default Credentials via `google.auth.default()`
+  - Added factory function `create_client()` for convenient initialization
+  - Comprehensive docstrings and type hints with google.auth type compatibility
+  - All 169 tests passing, linting and type checking clean
 - Task 2.4: Implemented stream utilities for Message DB stream name management
   - Created `generate_thread_id()` for UUID4 thread identifier generation
   - Created `build_stream_name()` to build stream names in format `category:version-thread_id`
   - Created `parse_stream_name()` to parse stream names back into components
   - Comprehensive validation: prevents invalid characters, validates all components
   - Added 38 comprehensive tests covering all functions, edge cases, and round-trip consistency
-  - All 52 tests passing across the project
 - Task 2.3: Implemented `read_stream` function with Event dataclass and comprehensive tests
 - Task 10.2: Set up Docker-based Message DB test infrastructure with automatic container management
   - Switched to `ethangarofolo/message-db:1.3.1` image for reliable initialization
