@@ -496,21 +496,89 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
 
 ## Implementation Order
 
-Recommended implementation order for efficient development:
+### Basic End-to-End Flow (Minimum Viable Implementation)
 
-1. **Phase 1: Project Foundation** (Tasks 1.1-1.3)
-2. **Phase 2: Event Store Integration** (Tasks 2.1-2.4)
-3. **Phase 3: Event Schema** (Tasks 3.1-3.5)
-4. **Phase 10.2: Setup test infrastructure** (Task 10.1-10.2) - interleave with development
-5. **Phase 4: Projection Framework** (Tasks 4.1-4.5)
-6. **Phase 6: Tool Framework** (Tasks 6.1-6.4)
-7. **Phase 5: LLM Integration** (Tasks 5.1-5.4)
-8. **Phase 7: Processing Engine** (Tasks 7.1-7.5)
-9. **Phase 9: Configuration and CLI** (Tasks 9.1-9.3)
-10. **Phase 8: Observability** (Tasks 8.1-8.5)
-11. **Phase 10: Testing** (Tasks 10.3-10.7) - complete remaining tests
-12. **Phase 11: Documentation** (Tasks 11.1-11.5)
-13. **Phase 12: Polish** (Tasks 12.1-12.6)
+**Goal**: Get a working flow of user message → LLM call → response, all event-sourced through Message DB, without tool support.
+
+**Flow**:
+```
+1. User provides initial message
+2. start_session() → writes SessionStarted + UserMessageAdded events
+3. process_thread() loop:
+   - read_stream() → get all events
+   - project_to_next_step() → determine: LLM_CALL or TERMINATION
+   - if LLM_CALL:
+     - project_to_llm_context() → convert events to messages
+     - call_llm() → get response from Vertex AI
+     - write LLMResponseReceived event (or LLMCallFailed)
+   - if TERMINATION:
+     - write SessionCompleted event
+     - break
+4. Return final response to user
+```
+
+**Recommended Implementation Order** (~10-15 hours):
+
+1. **Event Definitions** (Tasks 3.1, 3.2, 3.3 partial, 3.5 partial)
+   - Task 3.1: Base event structure
+   - Task 3.2: User events (UserMessageAdded, SessionTerminationRequested)
+   - Task 3.3 (partial): Agent events (LLMResponseReceived, LLMCallFailed) - skip LLMCallRequested for now
+   - Task 3.5 (partial): System events (SessionStarted, SessionCompleted) - skip ErrorOccurred for now
+
+2. **Configuration** (Task 9.1)
+   - Task 9.1: Configuration module for Message DB + Vertex AI settings
+
+3. **LLM Integration** (Tasks 5.1-5.4)
+   - Task 5.1: Setup Vertex AI client
+   - Task 5.2: Message formatting for Vertex AI
+   - Task 5.3: LLM call function (without tools parameter for now)
+   - Task 5.4: System prompt definition
+
+4. **Projections** (Tasks 4.1, 4.2, 4.5)
+   - Task 4.1: Projection base infrastructure
+   - Task 4.2: LLM Context projection (UserMessageAdded → user message, LLMResponseReceived → assistant message)
+   - Task 4.5: Next Step projection (UserMessageAdded → LLM_CALL, LLMResponseReceived → TERMINATION for now, SessionCompleted → TERMINATION)
+
+5. **Processing Engine** (Tasks 7.4, 7.2 partial, 7.5, 7.1 simplified)
+   - Task 7.4: Session initialization
+   - Task 7.2 (simplified): LLM step execution (without tool registry parameter)
+   - Task 7.5: Session termination
+   - Task 7.1 (simplified): Processing loop (without tool execution step)
+
+6. **Simple Test Script** (Task 9.3 simplified)
+   - Create minimal script to test end-to-end flow
+   - Skip full CLI for now, just a simple Python script
+
+**What to Skip for Basic Flow**:
+- Task 3.4: Tool event types (entire task)
+- Task 4.3: Session State projection (nice-to-have)
+- Task 4.4: Tool Arguments projection (entire task)
+- Task 6.1-6.4: All tool framework tasks
+- Task 7.3: Tool step execution
+- Task 9.2: Full CLI interface
+- Task 8.1-8.5: Observability (can add later)
+
+**After Basic Flow Works, Add Tools**:
+- Phase 6: Tool Framework (Tasks 6.1-6.4)
+- Task 3.4: Tool event types
+- Task 4.4: Tool Arguments projection
+- Task 7.3: Tool step execution
+- Update Task 4.5: Next Step projection to handle tool execution
+- Update Task 7.2: LLM step to pass tools to LLM
+
+### Full Implementation Order
+
+Recommended implementation order for complete system:
+
+1. **Phase 1: Project Foundation** (Tasks 1.1-1.3) ✅ COMPLETE
+2. **Phase 2: Event Store Integration** (Tasks 2.1-2.4) ✅ COMPLETE
+3. **Basic End-to-End Flow** (see above) ⬅ **START HERE**
+4. **Phase 6: Tool Framework** (Tasks 6.1-6.4)
+5. **Phase 8: Observability** (Tasks 8.1-8.5)
+6. **Phase 9: Full CLI** (Task 9.2, complete 9.3)
+7. **Phase 10: Testing** (Tasks 10.1, 10.3-10.7) - complete remaining tests
+8. **Phase 11: Documentation** (Tasks 11.1-11.5)
+9. **Phase 12: Polish** (Tasks 12.1-12.6)
 
 ## Progress Tracking
 
