@@ -108,11 +108,16 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - Note: LLMCallRequested not implemented (not required for basic flow)
   - Validation ensures either response_text or tool_calls is present
 
-- [ ] **Task 3.4: Define Tool event types**
+- [x] **Task 3.4: Define Tool event types**
   - Create `src/messagedb_agent/events/tool.py`
   - Define ToolExecutionRequested event with payload: tool_name, arguments (dict)
   - Define ToolExecutionCompleted event with payload: tool_name, result, execution_time_ms
   - Define ToolExecutionFailed event with payload: tool_name, error_message, retry_count
+  - Created ToolExecutionRequestedData with tool_name and arguments (dict[str, Any])
+  - Created ToolExecutionCompletedData with tool_name, result (Any), and execution_time_ms
+  - Created ToolExecutionFailedData with tool_name, error_message, and retry_count
+  - Added event type constants: TOOL_EXECUTION_REQUESTED, TOOL_EXECUTION_COMPLETED, TOOL_EXECUTION_FAILED
+  - Comprehensive validation for all fields (non-empty names, non-negative times/retries)
 
 - [x] **Task 3.5: Define System event types**
   - Create `src/messagedb_agent/events/system.py`
@@ -638,20 +643,21 @@ Recommended implementation order for complete system:
 ## Progress Tracking
 
 - Total Tasks: 78
-- Completed: 17 (Tasks 1.1, 1.2, 1.3, 2.1, 2.2, 2.3, 2.4, 3.1, 3.2, 3.3, 3.5, 5.1, 5.2, 5.3, 5.3.1, 5.4, 10.2)
+- Completed: 18 (Tasks 1.1-1.3, 2.1-2.4, 3.1-3.5, 5.1-5.4, 10.2)
 - In Progress: 0
-- Remaining: 61
-- Completion: 21.8%
+- Remaining: 60
+- Completion: 23.1%
 
 Last Updated: 2025-10-19
 
 **Recent Completions:**
-- Phase 3: Event Schema and Types (MOSTLY COMPLETE - 4 of 5 tasks done!)
+- Phase 3: Event Schema and Types (COMPLETE - All 5 tasks done! ✅)
   - Task 3.1: Base event structure with BaseEvent and EventData classes
   - Task 3.2: User event types (UserMessageAdded, SessionTerminationRequested)
   - Task 3.3: Agent event types (LLMResponseReceived, LLMCallFailed, ToolCall)
+  - Task 3.4: Tool event types (ToolExecutionRequested, ToolExecutionCompleted, ToolExecutionFailed)
   - Task 3.5: System event types (SessionStarted, SessionCompleted)
-  - Only Task 3.4 (Tool event types) remains - will be needed when adding tool support
+  - All event types have comprehensive validation and are exported from events module
 - Task 5.4: Define system prompt (COMPLETE - Phase 5 LLM Integration now complete!)
   - Created comprehensive prompts.py module with 3 default prompts
   - `DEFAULT_SYSTEM_PROMPT` - Event-sourced agent with tool guidance
