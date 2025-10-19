@@ -1,8 +1,9 @@
-"""
-Event type definitions for the messagedb-agent system.
+"""Event type definitions for the event-sourced agent system.
 
-This module contains all event schemas including user events, agent events,
-tool events, and system events.
+This package contains event schemas and type definitions for all events
+that can be recorded in the Message DB event streams.
 """
 
-__all__ = []
+from messagedb_agent.events.base import BaseEvent, EventData
+
+__all__ = ["BaseEvent", "EventData"]
