@@ -2,6 +2,25 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Workflow for Claude Code
+
+**IMPORTANT**: After making any major code changes (new features, bug fixes, refactoring), you MUST:
+
+1. **Run all linting and formatting tools** in this order:
+   - `uv run ruff check src/ tests/` - Check for issues
+   - `uv run ruff check --fix src/ tests/` - Auto-fix issues
+   - `uv run black src/ tests/` - Format code
+   - `uv run mypy src/` - Type check
+   - **Fix any remaining errors** reported by these tools before proceeding
+
+2. **Commit changes to git** when major work is complete:
+   - Stage relevant files with `git add`
+   - Create a descriptive commit message following the existing style
+   - Include the Claude Code footer in commit messages
+   - Verify commit success with `git status`
+
+Do NOT ask the user if they want you to run linting or commit - do it proactively as part of completing the work.
+
 ## Project Overview
 
 This is an event-sourced agent system using Message DB (PostgreSQL) for durable, observable, and distributed LLM agent execution. The core architecture follows an event sourcing pattern where all agent interactions, decisions, and actions are recorded as immutable events in persistent streams.
