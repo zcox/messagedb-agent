@@ -79,6 +79,9 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --cov=messagedb_agent --cov-report=term-missing"
+markers = [
+    "integration: marks tests as integration tests that require external services (deselect with '-m \"not integration\"')",
+]
 
 [dependency-groups]
 dev = [
