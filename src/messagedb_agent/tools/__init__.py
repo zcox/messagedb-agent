@@ -4,6 +4,13 @@ This module provides the tool registration and execution infrastructure
 for the event-sourced agent system.
 """
 
+from messagedb_agent.tools.builtin import (
+    calculate,
+    echo,
+    get_builtin_tools,
+    get_current_time,
+    register_builtin_tools,
+)
 from messagedb_agent.tools.executor import (
     ToolExecutionError,
     ToolExecutionResult,
@@ -40,4 +47,10 @@ __all__ = [
     "execute_tool",
     "execute_tool_safe",
     "batch_execute_tools",
+    # Builtin tools
+    "get_current_time",
+    "echo",
+    "calculate",
+    "get_builtin_tools",
+    "register_builtin_tools",
 ]
