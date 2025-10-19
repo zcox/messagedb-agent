@@ -157,7 +157,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
 - [ ] **Task 5.1: Setup Vertex AI client**
   - Create `src/messagedb_agent/llm/client.py`
   - Initialize Vertex AI using google.auth.default() for ADC
-  - Configure from environment variables: GCP_PROJECT, GCP_LOCATION, MODEL_NAME (gemini-1.5-pro or claude-3-5-sonnet@20241022)
+  - Configure from environment variables: GCP_PROJECT, GCP_LOCATION, MODEL_NAME (eg gemini-2.5-pro or claude-sonnet-4-5@20250929)
   - Create wrapper for unified interface regardless of model choice
 
 - [ ] **Task 5.2: Implement message formatting**
