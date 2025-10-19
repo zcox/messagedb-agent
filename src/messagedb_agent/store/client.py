@@ -5,6 +5,7 @@ a PostgreSQL-based event store.
 """
 
 import os
+from typing import Any, cast
 
 import structlog
 from psycopg import Connection
@@ -202,7 +203,7 @@ class MessageDBClient:
             with conn.cursor() as cur:
                 # Check basic connectivity
                 cur.execute("SELECT 1 as health")
-                result = cur.fetchone()
+                result = cast(dict[str, Any] | None, cur.fetchone())
                 if result is None or result.get("health") != 1:
                     self._logger.error("Health check failed: unexpected result")
                     return False
@@ -217,7 +218,7 @@ class MessageDBClient:
                     ) as has_write_message
                     """
                 )
-                result = cur.fetchone()
+                result = cast(dict[str, Any] | None, cur.fetchone())
                 if result is None or not result.get("has_write_message"):
                     self._logger.error(
                         "Health check failed: write_message function not found. "

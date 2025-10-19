@@ -6,7 +6,7 @@ Message DB event streams.
 
 import json
 import uuid
-from typing import Any
+from typing import Any, cast
 
 import structlog
 from psycopg import errors as psycopg_errors
@@ -141,12 +141,12 @@ def write_event(
                 },
             )
 
-            result = cur.fetchone()
+            result = cast(dict[str, Any] | None, cur.fetchone())
             if result is None:
                 raise RuntimeError("write_message returned no result")
 
             # The stored procedure returns the position
-            position = result["write_message"]
+            position: int = result["write_message"]
 
             log.info("Event written successfully", position=position)
             return position
