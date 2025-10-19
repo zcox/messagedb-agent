@@ -8,6 +8,7 @@ This module provides pytest fixtures for:
 
 import os
 
+import psycopg
 import pytest
 
 from messagedb_agent.store import MessageDBClient, MessageDBConfig
@@ -26,16 +27,26 @@ def docker_setup():
 
 
 @pytest.fixture(scope="session")
+def docker_cleanup():
+    """Override docker cleanup to not delete volumes.
+
+    Default is 'down -v' which deletes volumes and causes database to be reset.
+    We just want 'down' to preserve the initialized database.
+    """
+    return ["down"]
+
+
+@pytest.fixture(scope="session")
 def messagedb_service(docker_services):
     """Start Message DB container and wait for it to be ready.
 
     This fixture starts the Message DB Docker container and waits for it
     to accept connections and for Message DB to be fully installed before running tests.
     """
-    # Wait for Message DB to be ready (give it time to run install scripts)
-    # Message DB initialization can take 30-45 seconds
+    # Wait for Message DB to be ready
+    # Container initializes in ~8 seconds
     docker_services.wait_until_responsive(
-        timeout=90.0, pause=2.0, check=lambda: is_messagedb_responsive()
+        timeout=30.0, pause=0.5, check=lambda: is_messagedb_responsive()
     )
     return "messagedb"
 
@@ -46,36 +57,39 @@ def is_messagedb_responsive():
     Returns:
         True if Message DB accepts connections and has functions installed, False otherwise.
     """
+    import time
+
     try:
-        config = MessageDBConfig(
-            host="localhost",
-            port=5433,
-            database="message_store",
-            user="postgres",
-            password="message_store_password",
+        # Use a direct connection (not connection pool) for health check
+        # Connection pool creation was causing delays
+        conninfo = (
+            "host=localhost port=5433 "
+            "dbname=message_store user=postgres password=message_store_password"
         )
-        with MessageDBClient(config) as client:
-            conn = client.get_connection()
-            try:
-                with conn.cursor() as cur:
-                    # Check basic connectivity
-                    cur.execute("SELECT 1")
-                    # Check that Message DB functions are installed
-                    cur.execute(
-                        """
-                        SELECT COUNT(*) FROM pg_proc
-                        WHERE proname = 'write_message'
-                        AND pronamespace = (
-                            SELECT oid FROM pg_namespace WHERE nspname = 'message_store'
-                        )
-                        """
+        with psycopg.connect(conninfo) as conn:
+            with conn.cursor() as cur:
+                # Check basic connectivity
+                cur.execute("SELECT 1")
+                # Check that ALL Message DB functions are installed
+                # The database accepts connections before all functions are created,
+                # so we need to check for helper functions like acquire_lock too
+                cur.execute(
+                    """
+                    SELECT COUNT(*) FROM pg_proc
+                    WHERE proname IN ('write_message', 'acquire_lock', 'get_stream_messages')
+                    AND pronamespace = (
+                        SELECT oid FROM pg_namespace WHERE nspname = 'message_store'
                     )
-                    result = cur.fetchone()
-                    if result and result[0] > 0:
-                        return True
-                    return False
-            finally:
-                client.return_connection(conn)
+                    """
+                )
+                result = cur.fetchone()
+                # Should have all 3 functions
+                count = result[0] if result else 0
+                if count >= 3:
+                    # Give it an extra second after functions appear to ensure stability
+                    time.sleep(1)
+                    return True
+                return False
     except Exception:
         return False
 
