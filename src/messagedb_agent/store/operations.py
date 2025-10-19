@@ -176,8 +176,11 @@ def write_event(
             # The stored procedure returns the position
             position: int = result["write_message"]
 
-            log.info("Event written successfully", position=position)
-            return position
+        # Commit the transaction so the write is persisted
+        conn.commit()
+
+        log.info("Event written successfully", position=position)
+        return position
 
     except psycopg_errors.RaiseException as e:
         # Message DB raises an exception for optimistic concurrency violations
@@ -189,13 +192,15 @@ def write_event(
             )
             # Try to parse the actual version from the error message
             # Format: "Wrong expected version: {expected} (Stream: {stream},
-            # Stream Version: {actual})"
+            # Stream Version: {actual})\nCONTEXT: ..."
             actual_version = None
             if "Stream Version:" in error_message:
                 try:
-                    actual_version = int(
-                        error_message.split("Stream Version:")[1].strip().rstrip(")")
-                    )
+                    # Extract the version number between "Stream Version: " and ")"
+                    version_part = error_message.split("Stream Version:")[1]
+                    # Split on either newline or closing paren to handle CONTEXT
+                    version_str = version_part.split(")")[0].strip()
+                    actual_version = int(version_str)
                 except (IndexError, ValueError):
                     pass
 
@@ -332,8 +337,11 @@ def read_stream(
                 )
                 events.append(event)
 
-            log.info("Successfully read events from stream", event_count=len(events))
-            return events
+        # Commit the transaction to release locks
+        conn.commit()
+
+        log.info("Successfully read events from stream", event_count=len(events))
+        return events
 
     except Exception as e:
         log.error("Error while reading stream", error=str(e), error_type=type(e).__name__)

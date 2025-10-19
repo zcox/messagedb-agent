@@ -54,14 +54,15 @@ class MessageDBConfig:
         """Generate PostgreSQL connection string.
 
         Returns:
-            Connection string in DSN format
+            Connection string in DSN format with search_path configured for Message DB
         """
         return (
             f"host={self.host} "
             f"port={self.port} "
             f"dbname={self.database} "
             f"user={self.user} "
-            f"password={self.password}"
+            f"password={self.password} "
+            f"options='-c search_path=message_store,public'"
         )
 
     def validate(self) -> None:
