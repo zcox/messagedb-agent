@@ -50,8 +50,7 @@ def test_e2e_write_read_project_llm(messagedb_client: MessageDBClient) -> None:
 
     gcp_location = os.getenv("GCP_LOCATION", "us-central1")
     # Default to Gemini for faster/cheaper testing, but Claude works too
-    # Use gemini-1.5-flash for better availability across regions
-    model_name = os.getenv("TEST_MODEL_NAME", "gemini-1.5-flash")
+    model_name = os.getenv("TEST_MODEL_NAME", "gemini-2.5-flash")
 
     # Step 1: Write events to Message DB
     thread_id = generate_thread_id()
@@ -161,7 +160,7 @@ def test_e2e_multi_turn_conversation(messagedb_client: MessageDBClient) -> None:
         pytest.skip("GCP_PROJECT environment variable not set")
 
     gcp_location = os.getenv("GCP_LOCATION", "us-central1")
-    model_name = os.getenv("TEST_MODEL_NAME", "gemini-1.5-flash")
+    model_name = os.getenv("TEST_MODEL_NAME", "gemini-2.5-flash")
 
     # Initialize
     thread_id = generate_thread_id()
