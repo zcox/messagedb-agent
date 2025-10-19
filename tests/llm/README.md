@@ -23,8 +23,8 @@ Before running these tests, you need:
    ```
 
 4. **Model Access**: Ensure you have access to the models being tested:
-   - Gemini: `gemini-2.0-flash-exp`
-   - Claude: `claude-3-5-sonnet-v2@20241022` (requires Anthropic on Vertex AI)
+   - Gemini: `gemini-2.5-flash`
+   - Claude: `claude-sonnet-4-5@20250929` (requires Anthropic on Vertex AI)
 
 ## Running the Tests
 
@@ -96,8 +96,8 @@ SKIPPED [1] tests/llm/test_integration.py:42: GCP_PROJECT environment variable n
 ## Cost Considerations
 
 These tests make real API calls and will incur small costs:
-- Gemini 2.0 Flash: Very low cost (typically < $0.01 per test run)
-- Claude 3.5 Sonnet: Low cost (typically < $0.05 per test run)
+- Gemini 2.5 Flash: Very low cost (typically < $0.01 per test run)
+- Claude Sonnet 4.5: Low cost (typically < $0.05 per test run)
 
 Total cost for a full test run is typically < $0.10.
 

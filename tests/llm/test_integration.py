@@ -53,7 +53,7 @@ def gemini_config(gcp_project, gcp_location):
     return VertexAIConfig(
         project=gcp_project,
         location=gcp_location,
-        model_name="gemini-2.0-flash-exp",
+        model_name="gemini-2.5-flash",
     )
 
 
@@ -63,7 +63,7 @@ def claude_config(gcp_project, gcp_location):
     return VertexAIConfig(
         project=gcp_project,
         location=gcp_location,
-        model_name="claude-3-5-sonnet-v2@20241022",
+        model_name="claude-sonnet-4-5@20250929",
     )
 
 
@@ -86,7 +86,7 @@ class TestGeminiIntegration:
         assert response is not None
         assert response.text is not None
         assert len(response.text) > 0
-        assert response.model_name == "gemini-2.0-flash-exp"
+        assert response.model_name == "gemini-2.5-flash"
         assert response.tool_calls == []
 
         # Verify token usage
@@ -177,7 +177,7 @@ class TestClaudeIntegration:
         assert response is not None
         assert response.text is not None
         assert len(response.text) > 0
-        assert response.model_name == "claude-3-5-sonnet-v2@20241022"
+        assert response.model_name == "claude-sonnet-4-5@20250929"
         assert response.tool_calls == []
 
         # Verify token usage
@@ -260,7 +260,7 @@ class TestCrossModelCompatibility:
 
         assert gemini_response is not None
         assert gemini_response.text is not None
-        assert gemini_response.model_name == "gemini-2.0-flash-exp"
+        assert gemini_response.model_name == "gemini-2.5-flash"
 
         # Test with Claude
         claude_client = create_client(claude_config)
@@ -268,7 +268,7 @@ class TestCrossModelCompatibility:
 
         assert claude_response is not None
         assert claude_response.text is not None
-        assert claude_response.model_name == "claude-3-5-sonnet-v2@20241022"
+        assert claude_response.model_name == "claude-sonnet-4-5@20250929"
 
         print(f"\n[Gemini] Response: {gemini_response.text}")
         print(f"[Claude] Response: {claude_response.text}")
