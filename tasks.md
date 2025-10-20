@@ -605,6 +605,46 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - How to debug projection functions
   - How to replay sessions
 
+## Phase 12: Polish and Deployment Prep
+
+### 12. Final Steps
+- [ ] **Task 12.1: Add .env.example file**
+  - Document all environment variables
+  - Provide example values
+  - Add comments explaining each variable
+
+- [ ] **Task 12.2: Add .gitignore**
+  - Ignore __pycache__, .pyc files
+  - Ignore .env (but not .env.example)
+  - Ignore IDE-specific files
+  - Ignore test coverage reports
+
+- [ ] **Task 12.3: Add pre-commit hooks**
+  - Format code with black
+  - Lint with ruff or flake8
+  - Type check with mypy
+  - Run tests before commit
+
+- [ ] **Task 12.4: Create development setup script**
+  - Create `scripts/setup_dev.sh`
+  - Install uv if not present
+  - Create virtual environment
+  - Install dependencies
+  - Setup Message DB container
+  - Verify setup
+
+- [ ] **Task 12.5: Performance testing**
+  - Create `tests/test_performance.py`
+  - Benchmark projection performance with large event counts
+  - Benchmark event write/read throughput
+  - Document performance characteristics
+
+- [ ] **Task 12.6: Security audit**
+  - Review all external inputs for injection risks
+  - Ensure secrets not logged
+  - Verify SQL injection protection in Message DB client
+  - Review tool execution security (eval usage, etc.)
+
 ## Phase 13: Message DB Subscriber Framework
 
 ### 13. Subscriber Implementation
@@ -703,46 +743,6 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - This provides "live" output similar to `docker logs -f` or `tail -f`
   - Add tests for --follow functionality
   - Update CLI documentation
-
-## Phase 12: Polish and Deployment Prep
-
-### 12. Final Steps
-- [ ] **Task 12.1: Add .env.example file**
-  - Document all environment variables
-  - Provide example values
-  - Add comments explaining each variable
-
-- [ ] **Task 12.2: Add .gitignore**
-  - Ignore __pycache__, .pyc files
-  - Ignore .env (but not .env.example)
-  - Ignore IDE-specific files
-  - Ignore test coverage reports
-
-- [ ] **Task 12.3: Add pre-commit hooks**
-  - Format code with black
-  - Lint with ruff or flake8
-  - Type check with mypy
-  - Run tests before commit
-
-- [ ] **Task 12.4: Create development setup script**
-  - Create `scripts/setup_dev.sh`
-  - Install uv if not present
-  - Create virtual environment
-  - Install dependencies
-  - Setup Message DB container
-  - Verify setup
-
-- [ ] **Task 12.5: Performance testing**
-  - Create `tests/test_performance.py`
-  - Benchmark projection performance with large event counts
-  - Benchmark event write/read throughput
-  - Document performance characteristics
-
-- [ ] **Task 12.6: Security audit**
-  - Review all external inputs for injection risks
-  - Ensure secrets not logged
-  - Verify SQL injection protection in Message DB client
-  - Review tool execution security (eval usage, etc.)
 
 ## Implementation Order
 
