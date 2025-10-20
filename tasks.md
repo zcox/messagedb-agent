@@ -495,7 +495,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
     - Tool registry with test tools
 
 - [x] **Task 10.2: Setup Message DB test container** (Complete)
-  - Created `docker-compose.test.yml` using `ethangarofolo/message-db:1.3.1` image
+  - Created `docker-compose.yml` using `ethangarofolo/message-db:1.3.1` image
   - Configured PostgreSQL with Message DB v1.3.0 extension installed
   - Added pytest-docker dependency and fixtures in `tests/conftest.py`:
     - `messagedb_service`: Starts container automatically and waits for full initialization

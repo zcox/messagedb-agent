@@ -61,7 +61,7 @@ LOG_FORMAT=json
 Start the Message DB Docker container:
 
 ```bash
-docker-compose -f docker-compose.test.yml up -d
+docker-compose up -d
 ```
 
 ### Setting up GCP Authentication

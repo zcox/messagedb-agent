@@ -16,8 +16,8 @@ from messagedb_agent.store import MessageDBClient, MessageDBConfig
 
 @pytest.fixture(scope="session")
 def docker_compose_file():
-    """Return the path to the docker-compose.test.yml file."""
-    return os.path.join(os.path.dirname(__file__), "..", "docker-compose.test.yml")
+    """Return the path to the docker-compose.yml file."""
+    return os.path.join(os.path.dirname(__file__), "..", "docker-compose.yml")
 
 
 @pytest.fixture(scope="session")
