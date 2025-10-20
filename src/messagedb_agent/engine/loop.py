@@ -21,6 +21,7 @@ from uuid import UUID
 
 import structlog
 
+from messagedb_agent.engine.steps.llm import execute_llm_step
 from messagedb_agent.events.base import BaseEvent
 from messagedb_agent.llm.base import BaseLLMClient
 from messagedb_agent.projections.next_step import StepType, project_to_next_step
@@ -169,12 +170,19 @@ def process_thread(
             break
 
         # Step 4: Execute the appropriate step
-        # TODO: Implement LLM and Tool execution steps in Tasks 7.2 and 7.3
         if step_type == StepType.LLM_CALL:
-            log_iter.info("LLM step execution (placeholder - not yet implemented)")
-            # Will be implemented in Task 7.2
-            # execute_llm_step(events, llm_client, tool_registry, stream_name, store_client)
-            raise NotImplementedError("LLM step execution not yet implemented (Task 7.2)")
+            log_iter.info("Executing LLM step")
+            success = execute_llm_step(
+                events=events,
+                llm_client=llm_client,
+                tool_registry=tool_registry,
+                stream_name=stream_name,
+                store_client=store_client,
+            )
+            if not success:
+                log_iter.warning("LLM step failed after retries")
+                # Continue loop - the LLMCallFailed event was written
+                # Next iteration will determine next step based on failure event
 
         elif step_type == StepType.TOOL_EXECUTION:
             log_iter.info("Tool step execution (placeholder - not yet implemented)")

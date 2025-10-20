@@ -345,15 +345,25 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
     - 96% code coverage on loop.py (only untested path is max_iterations exception)
   - All 485 unit tests passing, linting/formatting/type checking clean
 
-- [ ] **Task 7.2: Implement LLM step execution**
-  - Create `src/messagedb_agent/engine/steps/llm.py`
-  - Implement `execute_llm_step(events, llm_client, tool_registry, stream_name, store_client)`
-  - Project events to LLM context
-  - Get tool declarations from registry
-  - Call LLM with context and tools
-  - Handle success: write LLMResponseReceived event
-  - Handle failure: write LLMCallFailed event, implement simple retry logic
-  - Return success/failure status
+- [x] **Task 7.2: Implement LLM step execution** (COMPLETE)
+  - Created `src/messagedb_agent/engine/steps/llm.py` with LLM step execution
+  - Implemented `execute_llm_step(events, llm_client, tool_registry, stream_name, store_client, system_prompt, max_retries)`
+  - Projects events to LLM context using `project_to_llm_context()`
+  - Gets tool declarations from registry using `registry_to_function_declarations()`
+  - Calls LLM with context, tools, and system prompt (defaults to DEFAULT_SYSTEM_PROMPT)
+  - Success path: writes LLMResponseReceived event with response text, tool calls, model name, and token usage
+  - Failure path: implements retry logic (max_retries=2 default), writes LLMCallFailed event after exhausting retries
+  - Returns True on success, False on failure after retries
+  - Created `LLMStepError` exception for critical failures (event write failures)
+  - Only passes tools to LLM if registry has tools (passes None for empty registry)
+  - Supports custom system prompts
+  - Tracks retry count in event metadata
+  - Integrated into main processing loop (loop.py now calls execute_llm_step)
+  - Updated loop tests to reflect LLM step implementation
+  - Created comprehensive test suite in `tests/engine/steps/test_llm.py`:
+    - 11 tests covering success/failure, retries, tool passing, custom prompts, event writing
+    - 96% code coverage on llm.py
+  - All 496 unit tests passing, linting/formatting/type checking clean
 
 - [ ] **Task 7.3: Implement Tool step execution**
   - Create `src/messagedb_agent/engine/steps/tool.py`
@@ -696,14 +706,22 @@ Recommended implementation order for complete system:
 ## Progress Tracking
 
 - Total Tasks: 78
-- Completed: 28 (Tasks 1.1-1.3, 2.1-2.4, 3.1-3.5, 4.1-4.5, 5.1-5.4, 6.1-6.4, 7.1, 10.2)
+- Completed: 29 (Tasks 1.1-1.3, 2.1-2.4, 3.1-3.5, 4.1-4.5, 5.1-5.4, 6.1-6.4, 7.1-7.2, 10.2)
 - In Progress: 0
-- Remaining: 50
-- Completion: 35.9%
+- Remaining: 49
+- Completion: 37.2%
 
 Last Updated: 2025-10-19
 
 **Recent Completions:**
+- Task 7.2: Implement LLM step execution (COMPLETE)
+  - Created execute_llm_step() function that projects events, calls LLM, and writes result events
+  - Implements retry logic with configurable max_retries (default 2)
+  - Writes LLMResponseReceived on success, LLMCallFailed on failure
+  - Returns True/False to indicate success/failure
+  - Integrated into main processing loop
+  - 11 comprehensive tests with 96% coverage
+  - All 496 unit tests passing, 83% overall coverage
 - Task 7.1: Implement processing loop (COMPLETE)
   - Created src/messagedb_agent/engine/loop.py with main processing loop
   - Implemented process_thread() with event reading, projection, and step routing

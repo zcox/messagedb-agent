@@ -174,6 +174,8 @@ class TestProcessThread:
         self, mock_store_client, mock_llm_client, tool_registry
     ):
         """Test that loop raises MaxIterationsExceeded when limit is reached."""
+        from messagedb_agent.llm import LLMResponse
+
         thread_id = "test-thread-123"
         stream_name = f"agent:v0-{thread_id}"
 
@@ -201,30 +203,42 @@ class TestProcessThread:
             ),
         ]
 
-        # Mock read_stream to always return same messages (no progress)
-        with patch("messagedb_agent.engine.loop.read_stream", return_value=messages):
-            # This should raise because USER_MESSAGE_ADDED triggers LLM_CALL
-            # which is not implemented yet (NotImplementedError)
-            # But first let's test the max_iterations guard
-            with pytest.raises(NotImplementedError):
-                # Actually, it will raise NotImplementedError first
-                process_thread(
-                    thread_id=thread_id,
-                    stream_name=stream_name,
-                    store_client=mock_store_client,
-                    llm_client=mock_llm_client,
-                    tool_registry=tool_registry,
-                    max_iterations=5,
-                )
+        # Mock LLM to return response (but stream doesn't update, causing infinite loop)
+        mock_llm_client.call.return_value = LLMResponse(
+            text="Response",
+            tool_calls=[],
+            model_name="claude-sonnet-4-5",
+            token_usage={},
+        )
 
-    def test_raises_not_implemented_for_llm_call(
+        # Mock read_stream to always return same messages (no progress)
+        # Mock write_message to fail (so no new events added)
+        with patch("messagedb_agent.engine.loop.read_stream", return_value=messages):
+            with patch("messagedb_agent.engine.steps.llm.write_message", side_effect=Exception("DB error")):
+                # Should raise LLMStepError because write fails
+                from messagedb_agent.engine.steps.llm import LLMStepError
+                with pytest.raises(LLMStepError):
+                    process_thread(
+                        thread_id=thread_id,
+                        stream_name=stream_name,
+                        store_client=mock_store_client,
+                        llm_client=mock_llm_client,
+                        tool_registry=tool_registry,
+                        max_iterations=5,
+                    )
+
+    def test_llm_step_execution_called(
         self, mock_store_client, mock_llm_client, tool_registry
     ):
-        """Test that LLM_CALL step raises NotImplementedError (until Task 7.2)."""
+        """Test that LLM_CALL step executes LLM step (Task 7.2 complete)."""
+        from messagedb_agent.llm import LLMResponse
+        from messagedb_agent.events.agent import LLM_RESPONSE_RECEIVED
+
         thread_id = "test-thread-123"
         stream_name = f"agent:v0-{thread_id}"
 
-        messages = [
+        # Initial messages trigger LLM call
+        initial_messages = [
             Message(
                 id=str(uuid4()),
                 stream_name=stream_name,
@@ -237,9 +251,32 @@ class TestProcessThread:
             ),
         ]
 
-        with patch("messagedb_agent.engine.loop.read_stream", return_value=messages):
-            with pytest.raises(NotImplementedError, match="LLM step execution not yet implemented"):
-                process_thread(
+        # After LLM response, session should complete
+        final_messages = initial_messages + [
+            Message(
+                id=str(uuid4()),
+                stream_name=stream_name,
+                type=SESSION_COMPLETED,
+                position=1,
+                global_position=1,
+                data={"completion_reason": "success"},
+                metadata={},
+                time=datetime.now(UTC),
+            ),
+        ]
+
+        # Mock LLM to return response
+        mock_llm_client.call.return_value = LLMResponse(
+            text="Hello!",
+            tool_calls=[],
+            model_name="claude-sonnet-4-5",
+            token_usage={},
+        )
+
+        # Mock read_stream to return initial messages, then final messages
+        with patch("messagedb_agent.engine.loop.read_stream", side_effect=[initial_messages, final_messages, final_messages]):
+            with patch("messagedb_agent.engine.steps.llm.write_message", return_value=1):
+                final_state = process_thread(
                     thread_id=thread_id,
                     stream_name=stream_name,
                     store_client=mock_store_client,
@@ -247,6 +284,12 @@ class TestProcessThread:
                     tool_registry=tool_registry,
                     max_iterations=10,
                 )
+
+        # Verify LLM was called
+        assert mock_llm_client.call.called
+        # Verify session completed
+        from messagedb_agent.projections.session_state import SessionStatus
+        assert final_state.status == SessionStatus.COMPLETED
 
     def test_raises_not_implemented_for_tool_execution(
         self, mock_store_client, mock_llm_client, tool_registry
