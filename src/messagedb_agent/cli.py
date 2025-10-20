@@ -525,10 +525,11 @@ def cmd_list(args: argparse.Namespace, config: Config) -> int:
                         (f"{category_pattern}-%", args.limit),
                     )
 
-                    streams = cast(
-                        list[tuple[str, datetime]],
-                        cur.fetchall(),
-                    )
+                    # Fetch results as list of dicts (due to dict_row factory)
+                    rows = cast(list[dict[str, Any]], cur.fetchall())
+                    streams: list[tuple[str, datetime]] = [
+                        (row["stream_name"], row["last_activity"]) for row in rows
+                    ]
             finally:
                 store_client.return_connection(conn)
 
