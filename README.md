@@ -72,6 +72,12 @@ Authenticate with Google Cloud to access Vertex AI:
 gcloud auth application-default login
 ```
 
+## Connecting to Local Message DB
+
+```
+PGPASSWORD=message_store_password PGOPTIONS="--search_path=message_store" psql -h localhost -p 5433 -U postgres -d message_store
+```
+
 ## CLI Usage
 
 The CLI provides commands for managing agent sessions:
