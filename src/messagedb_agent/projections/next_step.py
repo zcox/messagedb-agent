@@ -68,7 +68,7 @@ def project_to_next_step(events: list[BaseEvent]) -> tuple[StepType, dict[str, A
     Decision Logic (from most recent event):
     - UserMessageAdded -> LLM_CALL (process user's message)
     - LLMResponseReceived with tool_calls -> TOOL_EXECUTION (execute tools)
-    - LLMResponseReceived without tool_calls -> LLM_CALL (generate response)
+    - LLMResponseReceived without tool_calls -> TERMINATION (response complete)
     - LLMCallFailed -> TERMINATION (LLM call failed after retries)
     - ToolExecutionCompleted -> LLM_CALL (process tool results)
     - ToolExecutionFailed -> TERMINATION (tool execution failed)
@@ -120,9 +120,11 @@ def project_to_next_step(events: list[BaseEvent]) -> tuple[StepType, dict[str, A
                 {"tool_calls": tool_calls, "reason": "llm_requested_tools"},
             )
         else:
-            # LLM generated text response only, call LLM again to continue
-            # This allows the agent to respond to the user after generating text
-            return (StepType.LLM_CALL, {"reason": "llm_response_without_tools"})
+            # LLM generated final text response, session complete
+            return (
+                StepType.TERMINATION,
+                {"reason": "llm_response_complete"},
+            )
 
     elif last_event.type == LLM_CALL_FAILED:
         # LLM call failed after all retries, terminate session

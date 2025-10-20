@@ -89,8 +89,8 @@ class TestProjectToNextStep:
         assert len(metadata["tool_calls"]) == 1
         assert metadata["tool_calls"][0]["name"] == "get_weather"
 
-    def test_llm_response_without_tool_calls_returns_llm_call(self):
-        """Test that LLM response without tool calls triggers LLM_CALL."""
+    def test_llm_response_without_tool_calls_returns_termination(self):
+        """Test that LLM response without tool calls triggers TERMINATION."""
         events = [
             create_event(
                 LLM_RESPONSE_RECEIVED,
@@ -106,8 +106,8 @@ class TestProjectToNextStep:
 
         step_type, metadata = project_to_next_step(events)
 
-        assert step_type == StepType.LLM_CALL
-        assert metadata["reason"] == "llm_response_without_tools"
+        assert step_type == StepType.TERMINATION
+        assert metadata["reason"] == "llm_response_complete"
 
     def test_tool_execution_completed_returns_llm_call(self):
         """Test that ToolExecutionCompleted triggers LLM_CALL."""
@@ -245,7 +245,7 @@ class TestProjectToNextStep:
             )
         )
         step_type, _ = project_to_next_step(events)
-        assert step_type == StepType.LLM_CALL
+        assert step_type == StepType.TERMINATION
 
     def test_unknown_event_type_defaults_to_llm_call(self):
         """Test that unknown event types default to LLM_CALL."""
