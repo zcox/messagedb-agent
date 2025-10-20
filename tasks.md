@@ -459,15 +459,20 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
     - Processing: max_iterations, enable_tracing
     - Logging: log_level, log_format
 
-- [ ] **Task 9.2: Create CLI interface**
-  - Create `src/messagedb_agent/cli.py`
-  - Use argparse or click for CLI
-  - Commands:
+- [x] **Task 9.2: Create CLI interface** (COMPLETE)
+  - Created `src/messagedb_agent/cli.py` with argparse
+  - Implemented 4 commands:
     - `start <message>` - start new session with initial message
     - `continue <thread_id>` - continue existing session
-    - `show <thread_id>` - display session events
-    - `list` - list recent sessions
-  - Add --config flag for custom config file
+    - `show <thread_id>` - display session events (text or JSON format)
+    - `list` - list recent sessions with filters
+  - Added global options: --config, --category, --version
+  - Command-specific options: --max-iterations, --format, --full, --limit
+  - Helper functions: _convert_db_config(), _message_to_event()
+  - Proper error handling with exit codes
+  - Database query support for listing sessions
+  - 28 comprehensive tests with 100% passing
+  - All 566 unit tests passing (85% coverage)
 
 - [ ] **Task 9.3: Create main entry point**
   - Create `src/messagedb_agent/__main__.py`
@@ -729,14 +734,21 @@ Recommended implementation order for complete system:
 ## Progress Tracking
 
 - Total Tasks: 78
-- Completed: 32 (Tasks 1.1-1.3, 2.1-2.4, 3.1-3.5, 4.1-4.5, 5.1-5.4, 6.1-6.4, 7.1-7.5, 10.2)
+- Completed: 33 (Tasks 1.1-1.3, 2.1-2.4, 3.1-3.5, 4.1-4.5, 5.1-5.4, 6.1-6.4, 7.1-7.5, 9.2, 10.2)
 - In Progress: 0
-- Remaining: 46
-- Completion: 41.0%
+- Remaining: 45
+- Completion: 42.3%
 
 Last Updated: 2025-10-19
 
 **Recent Completions:**
+- Task 9.2: Create CLI interface (COMPLETE)
+  - Created comprehensive CLI with argparse providing 4 commands (start, continue, show, list)
+  - Global options: --config, --category, --version
+  - Command-specific options: --max-iterations, --format, --full, --limit
+  - Proper Message-to-Event conversion for projections
+  - Database query support for listing sessions
+  - 28 comprehensive tests, all 566 unit tests passing (85% coverage)
 - Task 7.5: Implement session termination (COMPLETE - Phase 7 COMPLETE! 🎉)
   - Added terminate_session() function for graceful session shutdown
   - Writes SessionCompleted event with termination reason
