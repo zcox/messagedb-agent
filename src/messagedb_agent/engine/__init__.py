@@ -5,4 +5,14 @@ This module contains the main processing loop, step execution logic,
 and session management for running event-sourced agent workflows.
 """
 
-__all__ = []
+from messagedb_agent.engine.loop import (
+    MaxIterationsExceeded,
+    ProcessingError,
+    process_thread,
+)
+
+__all__ = [
+    "process_thread",
+    "ProcessingError",
+    "MaxIterationsExceeded",
+]

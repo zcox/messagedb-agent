@@ -323,18 +323,27 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
 ## Phase 7: Processing Engine
 
 ### 7. Main Processing Loop
-- [ ] **Task 7.1: Implement processing loop**
-  - Create `src/messagedb_agent/engine/loop.py`
-  - Implement `process_thread(thread_id, store_client, llm_client, tool_registry, max_iterations=100)`
+- [x] **Task 7.1: Implement processing loop** (COMPLETE)
+  - Created `src/messagedb_agent/engine/loop.py` with main processing loop
+  - Implemented `process_thread(thread_id, stream_name, store_client, llm_client, tool_registry, max_iterations=100)`
   - Main loop structure:
     1. Read all events for thread from stream
-    2. Project to next_step
-    3. If TERMINATION, break
-    4. If LLM_CALL, execute LLM step
-    5. If TOOL_EXECUTION, execute tool step
-    6. Write result events back to stream
+    2. Convert Message objects to BaseEvent objects
+    3. Project to next_step to determine action
+    4. If TERMINATION, break and return final state
+    5. If LLM_CALL, raise NotImplementedError (Task 7.2)
+    6. If TOOL_EXECUTION, raise NotImplementedError (Task 7.3)
     7. Repeat until termination or max_iterations
-  - Return final session state
+  - Returns final SessionState projection
+  - Created `ProcessingError` and `MaxIterationsExceeded` exception classes
+  - Created `_message_to_event()` helper to convert Message DB Messages to BaseEvents
+  - Tracks whether termination was natural (via event) or hit max_iterations limit
+  - Exported process_thread and exceptions from engine module
+  - Created comprehensive test suite in `tests/engine/test_loop.py`:
+    - 11 tests covering conversion, termination, error handling, iteration limits
+    - Tests verify NotImplementedError for LLM/Tool steps (will be implemented in 7.2/7.3)
+    - 96% code coverage on loop.py (only untested path is max_iterations exception)
+  - All 485 unit tests passing, linting/formatting/type checking clean
 
 - [ ] **Task 7.2: Implement LLM step execution**
   - Create `src/messagedb_agent/engine/steps/llm.py`
@@ -687,14 +696,23 @@ Recommended implementation order for complete system:
 ## Progress Tracking
 
 - Total Tasks: 78
-- Completed: 27 (Tasks 1.1-1.3, 2.1-2.4, 3.1-3.5, 4.1-4.5, 5.1-5.4, 6.1-6.4, 10.2)
+- Completed: 28 (Tasks 1.1-1.3, 2.1-2.4, 3.1-3.5, 4.1-4.5, 5.1-5.4, 6.1-6.4, 7.1, 10.2)
 - In Progress: 0
-- Remaining: 51
-- Completion: 34.6%
+- Remaining: 50
+- Completion: 35.9%
 
 Last Updated: 2025-10-19
 
 **Recent Completions:**
+- Task 7.1: Implement processing loop (COMPLETE)
+  - Created src/messagedb_agent/engine/loop.py with main processing loop
+  - Implemented process_thread() with event reading, projection, and step routing
+  - Created ProcessingError and MaxIterationsExceeded exception classes
+  - Created _message_to_event() helper to convert Message DB Messages to BaseEvents
+  - Handles termination detection and max_iterations limit
+  - LLM_CALL and TOOL_EXECUTION steps raise NotImplementedError (for Tasks 7.2/7.3)
+  - 11 comprehensive tests with 96% coverage
+  - All 485 unit tests passing, linting/formatting/type checking clean
 - Task 6.4: Convert tools to LLM function declarations (COMPLETE - Phase 6 complete! ✅)
   - Created schema.py with 7 utility functions for Tool→ToolDeclaration conversion
   - tool_to_function_declaration(), tools_to_function_declarations(), registry_to_function_declarations()
