@@ -14,7 +14,7 @@ import pytest
 from messagedb_agent.config import VertexAIConfig
 from messagedb_agent.engine import process_thread, start_session
 from messagedb_agent.llm import create_llm_client
-from messagedb_agent.projections.session_state import SessionStatus, project_to_session_state
+from messagedb_agent.projections.session_state import SessionStatus
 from messagedb_agent.store import MessageDBClient, build_stream_name, read_stream
 from messagedb_agent.tools import ToolRegistry, register_tool
 
@@ -71,26 +71,21 @@ def test_full_workflow_without_tools(messagedb_client: MessageDBClient) -> None:
     # - Call LLM
     # - Write LLMResponseReceived
     # - Loop again
-    # - LLM response with no tools should trigger another LLM_CALL
-    # - But we need to terminate somehow...
+    # - LLM response with no tools triggers TERMINATION (natural completion)
 
-    # Actually, with no SessionCompleted event, this will keep looping
-    # Let's set max_iterations to 2 and expect the exception
-    from messagedb_agent.engine.loop import MaxIterationsExceeded
-
+    # The loop should terminate naturally when LLM provides a text response
     with messagedb_client:
-        with pytest.raises(MaxIterationsExceeded):
-            process_thread(
-                thread_id=thread_id,
-                stream_name=stream_name,
-                store_client=messagedb_client,
-                llm_client=llm_client,
-                tool_registry=tool_registry,
-                max_iterations=2,  # Limit iterations
-            )
+        final_state = process_thread(
+            thread_id=thread_id,
+            stream_name=stream_name,
+            store_client=messagedb_client,
+            llm_client=llm_client,
+            tool_registry=tool_registry,
+            max_iterations=10,  # Allow enough iterations
+        )
 
-    # Should have hit max iterations (no natural termination without tools)
-    # But we should have at least one LLM response
+    # Should have terminated naturally after LLM response
+    # Verify we got a session state back
     with messagedb_client:
         final_events = read_stream(client=messagedb_client, stream_name=stream_name)
 
@@ -105,8 +100,7 @@ def test_full_workflow_without_tools(messagedb_client: MessageDBClient) -> None:
     first_response = llm_responses[0]
     assert "4" in first_response.data["response_text"]
 
-    # Verify session state by projecting manually
-    final_state = project_to_session_state([_message_to_event(e) for e in final_events])
+    # Verify session state from process_thread return value
     assert final_state.thread_id == thread_id
     assert final_state.message_count == 1  # One user message
     assert final_state.llm_call_count >= 1  # At least one LLM call
@@ -177,19 +171,17 @@ def test_full_workflow_with_tools(messagedb_client: MessageDBClient) -> None:
     # 1. LLM_CALL → LLM responds with tool call
     # 2. TOOL_EXECUTION → Execute add_numbers(15, 27) = 42
     # 3. LLM_CALL → LLM gets tool result and responds with answer
-    # 4. LLM_CALL again (no termination event) or max iterations
-    from messagedb_agent.engine.loop import MaxIterationsExceeded
+    # 4. TERMINATION (LLM response without tool calls terminates naturally)
 
     with messagedb_client:
-        with pytest.raises(MaxIterationsExceeded):
-            process_thread(
-                thread_id=thread_id,
-                stream_name=stream_name,
-                store_client=messagedb_client,
-                llm_client=llm_client,
-                tool_registry=tool_registry,
-                max_iterations=5,  # Allow a few iterations
-            )
+        final_state = process_thread(
+            thread_id=thread_id,
+            stream_name=stream_name,
+            store_client=messagedb_client,
+            llm_client=llm_client,
+            tool_registry=tool_registry,
+            max_iterations=10,  # Allow enough iterations
+        )
 
     # Verify events
     with messagedb_client:
@@ -223,8 +215,7 @@ def test_full_workflow_with_tools(messagedb_client: MessageDBClient) -> None:
     # At minimum, verify we got a text response after tool execution
     assert len(final_response_text) > 0
 
-    # Verify session state by projecting manually
-    final_state = project_to_session_state([_message_to_event(e) for e in final_events])
+    # Verify session state from process_thread return value
     assert final_state.thread_id == thread_id
     assert final_state.message_count == 1
     assert final_state.llm_call_count >= 2
