@@ -51,7 +51,7 @@ class LLMResponse:
 
     Attributes:
         text: The text response from the model (may be None if only tool calls)
-        tool_calls: List of tool calls requested by the model
+        tool_calls: List of tool calls requested by the model (may be None/empty)
         model_name: Name of the model that generated this response
         token_usage: Dictionary with token usage statistics
             (input_tokens, output_tokens, total_tokens)
@@ -66,7 +66,7 @@ class LLMResponse:
     """
 
     text: str | None
-    tool_calls: list[ToolCall]
+    tool_calls: list[ToolCall] | None
     model_name: str
     token_usage: dict[str, int]
 
@@ -80,7 +80,11 @@ class LLMResponse:
             raise ValueError("model_name cannot be empty or whitespace-only")
 
         # Either text or tool_calls must be present
-        if not self.text and not self.tool_calls:
+        # Empty list [] is valid (no tools), but we need at least text or tool calls
+        has_text = self.text is not None and self.text.strip()
+        has_tool_calls = self.tool_calls is not None and len(self.tool_calls) > 0
+
+        if not has_text and not has_tool_calls:
             raise ValueError("LLMResponse must have either text or tool_calls")
 
 

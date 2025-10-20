@@ -245,7 +245,9 @@ class ClaudeClient(BaseLLMClient):
             # Parse content blocks
             for block in response.content:
                 if isinstance(block, TextBlock):
-                    text_parts.append(block.text)
+                    # Only append non-empty text to avoid empty strings
+                    if block.text and block.text.strip():
+                        text_parts.append(block.text)
                 elif isinstance(block, ToolUseBlock):
                     # Extract arguments from ToolUseBlock.input
                     # The input is a dict but type checker sees it as dict[Unknown, Unknown]
