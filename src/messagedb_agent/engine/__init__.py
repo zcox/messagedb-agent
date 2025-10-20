@@ -10,13 +10,19 @@ from messagedb_agent.engine.loop import (
     ProcessingError,
     process_thread,
 )
-from messagedb_agent.engine.session import SessionError, start_session, terminate_session
+from messagedb_agent.engine.session import (
+    SessionError,
+    add_user_message,
+    start_session,
+    terminate_session,
+)
 
 __all__ = [
     "process_thread",
     "ProcessingError",
     "MaxIterationsExceeded",
     "start_session",
+    "add_user_message",
     "terminate_session",
     "SessionError",
 ]

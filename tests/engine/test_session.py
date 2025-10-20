@@ -6,7 +6,12 @@ from uuid import UUID
 
 import pytest
 
-from messagedb_agent.engine.session import SessionError, start_session, terminate_session
+from messagedb_agent.engine.session import (
+    SessionError,
+    add_user_message,
+    start_session,
+    terminate_session,
+)
 from messagedb_agent.events.system import SESSION_COMPLETED, SESSION_STARTED
 from messagedb_agent.events.user import USER_MESSAGE_ADDED
 
@@ -409,3 +414,161 @@ class TestTerminateSession:
         # Verify multiline reason preserved
         call_args = mock_write.call_args[1]
         assert call_args["data"]["completion_reason"] == multiline_reason
+
+
+class TestAddUserMessage:
+    """Tests for the add_user_message function."""
+
+    @pytest.fixture
+    def mock_store_client(self):
+        """Create a mock MessageDB store client."""
+        return MagicMock()
+
+    def test_successful_message_addition(self, mock_store_client):
+        """Test successful addition of a user message to existing thread."""
+        with patch("messagedb_agent.engine.session.write_message", return_value=5) as mock_write:
+            position = add_user_message(
+                thread_id="abc-123", message="Hello again!", store_client=mock_store_client
+            )
+
+        # Verify write_message was called
+        assert mock_write.call_count == 1
+        assert position == 5
+
+    def test_returns_valid_position(self, mock_store_client):
+        """Test that the function returns the position from write_message."""
+        with patch("messagedb_agent.engine.session.write_message", return_value=42):
+            position = add_user_message(
+                thread_id="test-id", message="Test message", store_client=mock_store_client
+            )
+
+        assert position == 42
+
+    def test_uses_default_category_and_version(self, mock_store_client):
+        """Test default category and version are used."""
+        with patch("messagedb_agent.engine.session.write_message", return_value=0) as mock_write:
+            add_user_message(
+                thread_id="test-123", message="Test message", store_client=mock_store_client
+            )
+
+        # Verify stream name uses defaults
+        call_args = mock_write.call_args[1]
+        assert call_args["stream_name"] == "agent:v0-test-123"
+
+    def test_uses_custom_category_and_version(self, mock_store_client):
+        """Test custom category and version are used."""
+        with patch("messagedb_agent.engine.session.write_message", return_value=0) as mock_write:
+            add_user_message(
+                thread_id="test-123",
+                message="Test message",
+                store_client=mock_store_client,
+                category="custom",
+                version="v2",
+            )
+
+        # Verify stream name uses custom values
+        call_args = mock_write.call_args[1]
+        assert call_args["stream_name"] == "custom:v2-test-123"
+
+    def test_timestamp_is_iso8601_format(self, mock_store_client):
+        """Test that timestamp is in ISO 8601 format."""
+        with patch("messagedb_agent.engine.session.write_message", return_value=0) as mock_write:
+            add_user_message(
+                thread_id="test-123", message="Test message", store_client=mock_store_client
+            )
+
+        # Verify timestamp format
+        call_args = mock_write.call_args[1]
+        timestamp = call_args["data"]["timestamp"]
+        # Should be able to parse as ISO 8601
+        datetime.fromisoformat(timestamp)
+
+    def test_validates_empty_thread_id(self, mock_store_client):
+        """Test that empty thread_id raises ValueError."""
+        with pytest.raises(ValueError, match="thread_id cannot be empty"):
+            add_user_message(thread_id="", message="Test message", store_client=mock_store_client)
+
+    def test_validates_whitespace_only_thread_id(self, mock_store_client):
+        """Test that whitespace-only thread_id raises ValueError."""
+        with pytest.raises(ValueError, match="thread_id cannot be empty"):
+            add_user_message(
+                thread_id="   ", message="Test message", store_client=mock_store_client
+            )
+
+    def test_validates_empty_message(self, mock_store_client):
+        """Test that empty message raises ValueError."""
+        with pytest.raises(ValueError, match="message cannot be empty"):
+            add_user_message(thread_id="test-123", message="", store_client=mock_store_client)
+
+    def test_validates_whitespace_only_message(self, mock_store_client):
+        """Test that whitespace-only message raises ValueError."""
+        with pytest.raises(ValueError, match="message cannot be empty"):
+            add_user_message(
+                thread_id="test-123", message="   \n\t  ", store_client=mock_store_client
+            )
+
+    def test_raises_error_if_write_fails(self, mock_store_client):
+        """Test that SessionError is raised if write_message fails."""
+        with patch(
+            "messagedb_agent.engine.session.write_message", side_effect=Exception("Database error")
+        ):
+            with pytest.raises(SessionError, match="Failed to write UserMessageAdded"):
+                add_user_message(
+                    thread_id="test-123", message="Test message", store_client=mock_store_client
+                )
+
+    def test_preserves_multiline_message(self, mock_store_client):
+        """Test that multiline messages are preserved correctly."""
+        multiline_message = "Line 1\nLine 2\nLine 3"
+
+        with patch("messagedb_agent.engine.session.write_message", return_value=0) as mock_write:
+            add_user_message(
+                thread_id="test-123", message=multiline_message, store_client=mock_store_client
+            )
+
+        # Verify multiline message preserved
+        call_args = mock_write.call_args[1]
+        assert call_args["data"]["message"] == multiline_message
+
+    def test_preserves_special_characters(self, mock_store_client):
+        """Test that special characters in messages are preserved."""
+        special_message = "Test with émojis 🎉 and symbols: @#$%^&*()"
+
+        with patch("messagedb_agent.engine.session.write_message", return_value=0) as mock_write:
+            add_user_message(
+                thread_id="test-123", message=special_message, store_client=mock_store_client
+            )
+
+        # Verify special characters preserved
+        call_args = mock_write.call_args[1]
+        assert call_args["data"]["message"] == special_message
+
+    def test_user_message_event_structure(self, mock_store_client):
+        """Test that UserMessageAdded event has correct structure."""
+        test_message = "Test message content"
+
+        with patch("messagedb_agent.engine.session.write_message", return_value=0) as mock_write:
+            add_user_message(
+                thread_id="test-123", message=test_message, store_client=mock_store_client
+            )
+
+        # Verify event structure
+        call_args = mock_write.call_args[1]
+        assert call_args["message_type"] == USER_MESSAGE_ADDED
+        assert call_args["data"]["message"] == test_message
+        assert "timestamp" in call_args["data"]
+        assert call_args["metadata"] == {}
+
+    def test_long_message_handling(self, mock_store_client):
+        """Test that very long messages are handled correctly."""
+        long_message = "x" * 10000  # 10K character message
+
+        with patch("messagedb_agent.engine.session.write_message", return_value=0) as mock_write:
+            add_user_message(
+                thread_id="test-123", message=long_message, store_client=mock_store_client
+            )
+
+        # Verify long message preserved
+        call_args = mock_write.call_args[1]
+        assert call_args["data"]["message"] == long_message
+        assert len(call_args["data"]["message"]) == 10000

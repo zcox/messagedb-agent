@@ -145,6 +145,108 @@ def start_session(
     return thread_id
 
 
+def add_user_message(
+    thread_id: str,
+    message: str,
+    store_client: MessageDBClient,
+    category: str = "agent",
+    version: str = "v0",
+) -> int:
+    """Add a new user message to an existing session.
+
+    This function adds a UserMessageAdded event to an existing thread's event stream,
+    allowing the user to continue the conversation. After adding the message, you
+    should call process_thread() to continue processing the session.
+
+    Args:
+        thread_id: The thread ID of the existing session
+        message: The new message from the user
+        store_client: Connected MessageDB client for writing events
+        category: Stream category (default: "agent")
+        version: Stream version (default: "v0")
+
+    Returns:
+        The position of the written UserMessageAdded event in the stream
+
+    Raises:
+        SessionError: If event writing fails or other critical error occurs
+        ValueError: If thread_id or message is empty or whitespace-only
+
+    Example:
+        ```python
+        from messagedb_agent.store import MessageDBClient, MessageDBConfig
+        from messagedb_agent.engine.session import add_user_message
+
+        config = MessageDBConfig()
+        with MessageDBClient(config) as store_client:
+            # Add a new message to existing thread
+            position = add_user_message(
+                thread_id="abc-123-def-456",
+                message="Can you help me with something else?",
+                store_client=store_client
+            )
+            print(f"Message added at position: {position}")
+
+            # Now process the session
+            from messagedb_agent.engine.loop import process_thread
+            final_state = process_thread(
+                thread_id=thread_id,
+                stream_name=f"agent:v0-{thread_id}",
+                store_client=store_client,
+                llm_client=llm_client,
+                tool_registry=tool_registry
+            )
+        ```
+    """
+    # Validate input
+    if not thread_id or not thread_id.strip():
+        raise ValueError("thread_id cannot be empty or whitespace-only")
+
+    if not message or not message.strip():
+        raise ValueError("message cannot be empty or whitespace-only")
+
+    log = logger.bind(
+        thread_id=thread_id,
+        category=category,
+        version=version,
+    )
+
+    log.info("Adding user message to existing session")
+
+    # Build stream name
+    stream_name = build_stream_name(category, version, thread_id)
+    log = log.bind(stream_name=stream_name)
+
+    log.debug("Built stream name")
+
+    # Generate ISO 8601 timestamp
+    timestamp = datetime.now(UTC).isoformat()
+
+    # Write UserMessageAdded event
+    try:
+        user_message_position = write_message(
+            client=store_client,
+            stream_name=stream_name,
+            message_type=USER_MESSAGE_ADDED,
+            data={
+                "message": message,
+                "timestamp": timestamp,
+            },
+            metadata={},
+        )
+        log.info(
+            "User message added successfully",
+            position=user_message_position,
+            message_length=len(message),
+        )
+
+        return user_message_position
+
+    except Exception as e:
+        log.error("Failed to write UserMessageAdded event", error=str(e))
+        raise SessionError(f"Failed to write UserMessageAdded event: {e}") from e
+
+
 def terminate_session(
     thread_id: str,
     reason: str,

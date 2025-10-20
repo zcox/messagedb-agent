@@ -10,6 +10,7 @@ import pytest
 from messagedb_agent.cli import (
     cmd_continue,
     cmd_list,
+    cmd_message,
     cmd_show,
     cmd_start,
     create_parser,
@@ -23,7 +24,6 @@ from messagedb_agent.config import (
     VertexAIConfig,
 )
 from messagedb_agent.events import (
-    BaseEvent,
     LLM_RESPONSE_RECEIVED,
     SESSION_COMPLETED,
     SESSION_STARTED,
@@ -58,6 +58,7 @@ def test_config():
 def sample_messages():
     """Create sample messages for testing (returned by read_stream)."""
     from uuid import uuid4
+
     now = datetime.now(UTC)
     return [
         Message(
@@ -153,6 +154,14 @@ class TestParser:
         args = parser.parse_args(["continue", "thread-123"])
         assert args.command == "continue"
         assert args.thread_id == "thread-123"
+
+    def test_parse_message_command(self):
+        """Test parsing message command."""
+        parser = create_parser()
+        args = parser.parse_args(["message", "thread-123", "Hello again!"])
+        assert args.command == "message"
+        assert args.thread_id == "thread-123"
+        assert args.message == "Hello again!"
 
     def test_parse_show_command(self):
         """Test parsing show command."""
@@ -320,6 +329,102 @@ class TestContinueCommand:
         assert result == 1
 
 
+class TestMessageCommand:
+    """Tests for message command."""
+
+    @patch("messagedb_agent.cli.MessageDBClient")
+    @patch("messagedb_agent.cli.create_llm_client")
+    @patch("messagedb_agent.cli.read_stream")
+    @patch("messagedb_agent.cli.add_user_message")
+    @patch("messagedb_agent.cli.process_thread")
+    def test_cmd_message_success(
+        self,
+        mock_process,
+        mock_add_message,
+        mock_read_stream,
+        mock_create_llm,
+        mock_db_client,
+        test_config,
+        sample_messages,
+    ):
+        """Test successful message command execution."""
+        # Setup mocks
+        mock_read_stream.return_value = sample_messages
+        mock_add_message.return_value = 4
+        mock_final_state = SessionState(
+            thread_id="thread-123",
+            status=SessionStatus.COMPLETED,
+            message_count=3,
+            tool_call_count=0,
+            llm_call_count=2,
+            error_count=0,
+            last_activity_time=datetime.now(UTC),
+            session_start_time=datetime.now(UTC),
+            session_end_time=datetime.now(UTC),
+        )
+        mock_process.return_value = mock_final_state
+
+        # Create args namespace
+        parser = create_parser()
+        args = parser.parse_args(["message", "thread-123", "Hello again!"])
+
+        # Execute command
+        result = cmd_message(args, test_config)
+
+        # Verify
+        assert result == 0
+        mock_add_message.assert_called_once()
+        mock_process.assert_called_once()
+
+    @patch("messagedb_agent.cli.MessageDBClient")
+    @patch("messagedb_agent.cli.create_llm_client")
+    @patch("messagedb_agent.cli.read_stream")
+    def test_cmd_message_session_not_found(
+        self, mock_read_stream, mock_create_llm, mock_db_client, test_config
+    ):
+        """Test message command with non-existent session."""
+        # Setup mock to return empty events
+        mock_read_stream.return_value = []
+
+        # Create args namespace
+        parser = create_parser()
+        args = parser.parse_args(["message", "thread-999", "Test message"])
+
+        # Execute command
+        result = cmd_message(args, test_config)
+
+        # Verify
+        assert result == 1
+
+    @patch("messagedb_agent.cli.MessageDBClient")
+    @patch("messagedb_agent.cli.create_llm_client")
+    @patch("messagedb_agent.cli.read_stream")
+    @patch("messagedb_agent.cli.add_user_message")
+    def test_cmd_message_add_fails(
+        self,
+        mock_add_message,
+        mock_read_stream,
+        mock_create_llm,
+        mock_db_client,
+        test_config,
+        sample_messages,
+    ):
+        """Test message command when add_user_message fails."""
+        # Setup mocks
+        mock_read_stream.return_value = sample_messages
+        mock_add_message.side_effect = Exception("Failed to write message")
+
+        # Create args namespace
+        parser = create_parser()
+        args = parser.parse_args(["message", "thread-123", "Test message"])
+
+        # Execute command
+        result = cmd_message(args, test_config)
+
+        # Verify
+        assert result == 1
+
+
 class TestShowCommand:
     """Tests for show command."""
 
@@ -368,7 +473,9 @@ class TestShowCommand:
 
     @patch("messagedb_agent.cli.MessageDBClient")
     @patch("messagedb_agent.cli.read_stream")
-    def test_cmd_show_full_flag(self, mock_read_stream, mock_db_client, test_config, sample_messages):
+    def test_cmd_show_full_flag(
+        self, mock_read_stream, mock_db_client, test_config, sample_messages
+    ):
         """Test show command with --full flag."""
         # Setup mocks
         mock_read_stream.return_value = sample_messages
@@ -556,6 +663,17 @@ class TestMain:
         result = main(["continue", "thread-123"])
         assert result == 0
         mock_cmd_continue.assert_called_once()
+
+    @patch("messagedb_agent.cli.load_config")
+    @patch("messagedb_agent.cli.cmd_message")
+    def test_main_message_command(self, mock_cmd_message, mock_load_config, test_config):
+        """Test main dispatching to message command."""
+        mock_load_config.return_value = test_config
+        mock_cmd_message.return_value = 0
+
+        result = main(["message", "thread-123", "Hello again!"])
+        assert result == 0
+        mock_cmd_message.assert_called_once()
 
     @patch("messagedb_agent.cli.load_config")
     @patch("messagedb_agent.cli.cmd_show")

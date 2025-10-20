@@ -12,7 +12,7 @@ from typing import Any
 from uuid import UUID
 
 from messagedb_agent.config import Config, load_config
-from messagedb_agent.engine import process_thread, start_session
+from messagedb_agent.engine import add_user_message, process_thread, start_session
 from messagedb_agent.events import BaseEvent
 from messagedb_agent.llm import create_llm_client
 from messagedb_agent.projections import project_to_session_state
@@ -119,6 +119,19 @@ def create_parser() -> argparse.ArgumentParser:
     continue_parser = subparsers.add_parser("continue", help="Continue an existing agent session")
     continue_parser.add_argument("thread_id", type=str, help="Thread ID to continue")
     continue_parser.add_argument(
+        "--max-iterations",
+        type=int,
+        help="Override max iterations from config",
+        metavar="N",
+    )
+
+    # Message command - add a user message to existing session
+    message_parser = subparsers.add_parser(
+        "message", help="Add a new user message to an existing session and continue processing"
+    )
+    message_parser.add_argument("thread_id", type=str, help="Thread ID to send message to")
+    message_parser.add_argument("message", type=str, help="Message to send to the agent")
+    message_parser.add_argument(
         "--max-iterations",
         type=int,
         help="Override max iterations from config",
@@ -259,6 +272,89 @@ def cmd_continue(args: argparse.Namespace, config: Config) -> int:
             return 1
 
         print(f"Continuing session: {args.thread_id}")
+
+        # Process the session
+        max_iterations = (
+            args.max_iterations if args.max_iterations else config.processing.max_iterations
+        )
+        print(f"Processing session (max {max_iterations} iterations)...")
+
+        final_state = process_thread(
+            thread_id=args.thread_id,
+            stream_name=stream_name,
+            store_client=store_client,
+            llm_client=llm_client,
+            tool_registry=tool_registry,
+            max_iterations=max_iterations,
+        )
+
+        # Display results
+        print("\n" + "=" * 80)
+        print("SESSION COMPLETE")
+        print("=" * 80)
+        print(f"Thread ID: {args.thread_id}")
+        print(f"Status: {final_state.status.value}")
+        print(f"Messages: {final_state.message_count}")
+        print(f"LLM Calls: {final_state.llm_call_count}")
+        print(f"Tool Calls: {final_state.tool_call_count}")
+        print(f"Errors: {final_state.error_count}")
+
+        if final_state.session_start_time and final_state.session_end_time:
+            duration = (
+                final_state.session_end_time - final_state.session_start_time
+            ).total_seconds()
+            print(f"Duration: {duration:.2f}s")
+
+        return 0
+
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+
+def cmd_message(args: argparse.Namespace, config: Config) -> int:
+    """Handle the 'message' command - add a new user message to an existing session.
+
+    Args:
+        args: Parsed command-line arguments
+        config: System configuration
+
+    Returns:
+        Exit code (0 for success, non-zero for error)
+    """
+    try:
+        # Initialize clients
+        store_client = MessageDBClient(_convert_db_config(config))
+        llm_client = create_llm_client(config.vertex_ai)
+
+        # Initialize tool registry with builtin tools
+        tool_registry = ToolRegistry()
+        register_builtin_tools(tool_registry)
+
+        # Build stream name
+        stream_name = build_stream_name(args.category, args.version, args.thread_id)
+
+        # Check if session exists
+        events = read_stream(store_client, stream_name)
+        if not events:
+            print(
+                f"Error: No session found with thread ID: {args.thread_id}",
+                file=sys.stderr,
+            )
+            return 1
+
+        print(f"Adding message to session: {args.thread_id}")
+        print(f"Message: {args.message}")
+
+        # Add user message to the stream
+        position = add_user_message(
+            thread_id=args.thread_id,
+            message=args.message,
+            store_client=store_client,
+            category=args.category,
+            version=args.version,
+        )
+        print(f"Message added at position: {position}")
 
         # Process the session
         max_iterations = (
@@ -527,6 +623,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_start(args, config)
     elif args.command == "continue":
         return cmd_continue(args, config)
+    elif args.command == "message":
+        return cmd_message(args, config)
     elif args.command == "show":
         return cmd_show(args, config)
     elif args.command == "list":
