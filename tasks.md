@@ -365,15 +365,21 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
     - 96% code coverage on llm.py
   - All 496 unit tests passing, linting/formatting/type checking clean
 
-- [ ] **Task 7.3: Implement Tool step execution**
-  - Create `src/messagedb_agent/engine/steps/tool.py`
-  - Implement `execute_tool_step(events, tool_registry, stream_name, store_client)`
-  - Project events to get tool calls from last LLM response
+- [x] **Task 7.3: Implement Tool step execution** (COMPLETE)
+  - Created `src/messagedb_agent/engine/steps/tool.py` with `execute_tool_step()` function
+  - Projects events to get tool calls using `project_to_tool_arguments()`
   - For each tool call:
-    - Write ToolExecutionRequested event
-    - Execute tool
-    - Write ToolExecutionCompleted or ToolExecutionFailed event
-  - Return success/failure status
+    - Writes ToolExecutionRequested event
+    - Executes tool using `execute_tool(tool_name, arguments, tool_registry)`
+    - Writes ToolExecutionCompleted (success) or ToolExecutionFailed (failure) event
+  - Returns True if all tools succeeded, False if any failed
+  - Created `ToolStepError` exception for critical failures (event write failures)
+  - Updated main processing loop (loop.py) to call execute_tool_step
+  - Updated loop tests to verify tool step execution works
+  - Created comprehensive test suite in `tests/engine/steps/test_tool.py`:
+    - 12 tests covering success/failure, multiple tools, error handling, event writing
+    - 100% code coverage on tool.py
+  - All 508 unit tests passing, linting/formatting/type checking clean
 
 - [ ] **Task 7.4: Implement session initialization**
   - Create `src/messagedb_agent/engine/session.py`
@@ -706,14 +712,22 @@ Recommended implementation order for complete system:
 ## Progress Tracking
 
 - Total Tasks: 78
-- Completed: 29 (Tasks 1.1-1.3, 2.1-2.4, 3.1-3.5, 4.1-4.5, 5.1-5.4, 6.1-6.4, 7.1-7.2, 10.2)
+- Completed: 30 (Tasks 1.1-1.3, 2.1-2.4, 3.1-3.5, 4.1-4.5, 5.1-5.4, 6.1-6.4, 7.1-7.3, 10.2)
 - In Progress: 0
-- Remaining: 49
-- Completion: 37.2%
+- Remaining: 48
+- Completion: 38.5%
 
 Last Updated: 2025-10-19
 
 **Recent Completions:**
+- Task 7.3: Implement Tool step execution (COMPLETE)
+  - Created execute_tool_step() function that projects events, executes tools, and writes result events
+  - Projects events to get tool calls using project_to_tool_arguments()
+  - For each tool call: writes ToolExecutionRequested, executes tool, writes result event
+  - Returns True if all tools succeeded, False if any failed
+  - Updated main processing loop to call execute_tool_step
+  - 12 comprehensive tests with 100% coverage
+  - All 508 unit tests passing, 83% overall coverage
 - Task 7.2: Implement LLM step execution (COMPLETE)
   - Created execute_llm_step() function that projects events, calls LLM, and writes result events
   - Implements retry logic with configurable max_retries (default 2)

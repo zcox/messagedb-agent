@@ -22,6 +22,7 @@ from uuid import UUID
 import structlog
 
 from messagedb_agent.engine.steps.llm import execute_llm_step
+from messagedb_agent.engine.steps.tool import execute_tool_step
 from messagedb_agent.events.base import BaseEvent
 from messagedb_agent.llm.base import BaseLLMClient
 from messagedb_agent.projections.next_step import StepType, project_to_next_step
@@ -185,10 +186,17 @@ def process_thread(
                 # Next iteration will determine next step based on failure event
 
         elif step_type == StepType.TOOL_EXECUTION:
-            log_iter.info("Tool step execution (placeholder - not yet implemented)")
-            # Will be implemented in Task 7.3
-            # execute_tool_step(events, tool_registry, stream_name, store_client)
-            raise NotImplementedError("Tool step execution not yet implemented (Task 7.3)")
+            log_iter.info("Executing tool step")
+            success = execute_tool_step(
+                events=events,
+                tool_registry=tool_registry,
+                stream_name=stream_name,
+                store_client=store_client,
+            )
+            if not success:
+                log_iter.warning("Some tools failed during execution")
+                # Continue loop - tool failure events were written
+                # Next iteration will determine next step based on tool results
 
     # Check if we exceeded max iterations without natural termination
     if not terminated_naturally and iteration >= max_iterations:
