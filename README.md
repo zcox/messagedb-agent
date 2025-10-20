@@ -2,6 +2,8 @@
 
 Event-sourced agent system using Message DB for durable, observable, and distributed execution.
 
+Inspired by [Geoffrey Huntley's how to build a coding agent](https://ghuntley.com/agent/). What happens when the agent event-sources its message/session history instead of keeping it in an in-memory array?
+
 ## Overview
 
 This project implements an event-sourced architecture for agent systems where all agent interactions, decisions, and actions are recorded as immutable events in persistent streams. The system enables durable, observable, and distributed execution of agent workflows through event-driven processing.
