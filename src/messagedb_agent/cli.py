@@ -8,7 +8,8 @@ session events, and listing recent sessions.
 import argparse
 import json
 import sys
-from typing import Any
+from datetime import datetime
+from typing import Any, cast
 from uuid import UUID
 
 from messagedb_agent.config import Config, load_config
@@ -511,7 +512,7 @@ def cmd_list(args: argparse.Namespace, config: Config) -> int:
                 with conn.cursor() as cur:  # type: ignore[attr-defined]
                     # Get all distinct streams in this category
                     # We query the messages table directly to find unique stream names
-                    cur.execute(
+                    cur.execute(  # type: ignore[reportUnknownMemberType]
                         """
                         SELECT DISTINCT stream_name, MAX(time) as last_activity
                         FROM message_store.messages
@@ -523,7 +524,10 @@ def cmd_list(args: argparse.Namespace, config: Config) -> int:
                         (f"{category_pattern}-%", args.limit),
                     )
 
-                    streams: list[tuple[str, Any]] = cur.fetchall()  # type: ignore[assignment]
+                    streams = cast(
+                        list[tuple[str, datetime]],
+                        cur.fetchall(),  # type: ignore[reportUnknownMemberType]
+                    )
 
             if not streams:
                 print(f"No sessions found for category: {args.category}:{args.version}")
@@ -533,7 +537,7 @@ def cmd_list(args: argparse.Namespace, config: Config) -> int:
             if args.format == "json":
                 # JSON format - get full session state for each stream
                 sessions_data: list[dict[str, Any]] = []
-                for stream_name, last_activity in streams:  # type: ignore[misc]
+                for stream_name, last_activity in streams:
                     messages = read_stream(store_client, stream_name)
                     if messages:
                         events = [_message_to_event(msg) for msg in messages]
@@ -570,10 +574,10 @@ def cmd_list(args: argparse.Namespace, config: Config) -> int:
                 print(f"{'Thread ID':<40} {'Status':<12} {'Messages':<10} {'Last Activity':<20}")
                 print("=" * 80)
 
-                for stream_name, last_activity in streams:  # type: ignore[misc]
+                for stream_name, last_activity in streams:
                     # Extract thread_id from stream_name
                     # Format: category:version-thread_id
-                    parts: list[str] = stream_name.split("-", 1)  # type: ignore[assignment]
+                    parts = stream_name.split("-", 1)
                     if len(parts) == 2:
                         thread_id = parts[1]
 
