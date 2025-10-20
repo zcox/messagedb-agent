@@ -508,11 +508,12 @@ def cmd_list(args: argparse.Namespace, config: Config) -> int:
             # We'll use get_category_messages to find all sessions
             category_pattern = f"{args.category}:{args.version}"
 
-            with store_client as conn:
-                with conn.cursor() as cur:  # type: ignore[attr-defined]
+            conn = store_client.get_connection()
+            try:
+                with conn.cursor() as cur:
                     # Get all distinct streams in this category
                     # We query the messages table directly to find unique stream names
-                    cur.execute(  # type: ignore[reportUnknownMemberType]
+                    cur.execute(
                         """
                         SELECT DISTINCT stream_name, MAX(time) as last_activity
                         FROM message_store.messages
@@ -526,8 +527,10 @@ def cmd_list(args: argparse.Namespace, config: Config) -> int:
 
                     streams = cast(
                         list[tuple[str, datetime]],
-                        cur.fetchall(),  # type: ignore[reportUnknownMemberType]
+                        cur.fetchall(),
                     )
+            finally:
+                store_client.return_connection(conn)
 
             if not streams:
                 print(f"No sessions found for category: {args.category}:{args.version}")
