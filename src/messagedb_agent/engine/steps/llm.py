@@ -20,6 +20,7 @@ from messagedb_agent.llm import (
     BaseLLMClient,
     LLMError,
 )
+from messagedb_agent.output import print_llm_text_response, print_tool_call
 from messagedb_agent.projections import project_to_llm_context
 from messagedb_agent.store import MessageDBClient, write_message
 from messagedb_agent.tools import ToolRegistry, registry_to_function_declarations
@@ -132,6 +133,15 @@ def execute_llm_step(
                 tool_call_count=len(response.tool_calls or []),
                 model=response.model_name,
             )
+
+            # Print LLM response to user
+            if response.text:
+                print_llm_text_response(response.text, response.model_name)
+
+            # Print tool calls to user
+            if response.tool_calls:
+                for tc in response.tool_calls:
+                    print_tool_call(tc.id, tc.name, tc.arguments)
 
             # Step 5: Write LLMResponseReceived event
             event_data: dict[str, Any] = {

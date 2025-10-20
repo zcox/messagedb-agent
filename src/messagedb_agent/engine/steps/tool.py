@@ -19,6 +19,7 @@ from messagedb_agent.events.tool import (
     TOOL_EXECUTION_FAILED,
     TOOL_EXECUTION_REQUESTED,
 )
+from messagedb_agent.output import print_tool_result
 from messagedb_agent.projections import project_to_tool_arguments
 from messagedb_agent.store import MessageDBClient, write_message
 from messagedb_agent.tools import ToolRegistry, execute_tool
@@ -139,10 +140,18 @@ def execute_tool_step(
         log_tool.debug("Executing tool", arguments=arguments)
         result = execute_tool(tool_name, arguments, tool_registry)
 
-        # Step 2c: Write success or failure event based on result
+        # Step 2c: Print and write success or failure event based on result
         if result.success:
             log_tool.info(
                 "Tool execution succeeded",
+                execution_time_ms=result.execution_time_ms,
+            )
+
+            # Print tool result to user
+            print_tool_result(
+                tool_name=tool_name,
+                success=True,
+                result=result.result,
                 execution_time_ms=result.execution_time_ms,
             )
 
@@ -172,6 +181,14 @@ def execute_tool_step(
             all_successful = False
             log_tool.warning(
                 "Tool execution failed",
+                error=result.error,
+                execution_time_ms=result.execution_time_ms,
+            )
+
+            # Print tool failure to user
+            print_tool_result(
+                tool_name=tool_name,
+                success=False,
                 error=result.error,
                 execution_time_ms=result.execution_time_ms,
             )
