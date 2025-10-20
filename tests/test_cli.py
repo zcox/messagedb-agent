@@ -517,8 +517,13 @@ class TestListCommand:
         mock_conn = Mock()
         mock_cursor = Mock()
 
-        # Setup context managers properly
-        mock_db_client.return_value = mock_store
+        # Setup outer context manager (MessageDBClient)
+        mock_client_cm = Mock()
+        mock_client_cm.__enter__ = Mock(return_value=mock_store)
+        mock_client_cm.__exit__ = Mock(return_value=False)
+        mock_db_client.return_value = mock_client_cm
+
+        # Setup inner context manager (connection)
         mock_store.__enter__ = Mock(return_value=mock_conn)
         mock_store.__exit__ = Mock(return_value=False)
 

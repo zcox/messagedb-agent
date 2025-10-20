@@ -184,57 +184,58 @@ def cmd_start(args: argparse.Namespace, config: Config) -> int:
     """
     try:
         # Initialize clients
-        store_client = MessageDBClient(_convert_db_config(config))
         llm_client = create_llm_client(config.vertex_ai)
 
         # Initialize tool registry with builtin tools
         tool_registry = ToolRegistry()
         register_builtin_tools(tool_registry)
 
-        # Start the session
-        print(f"Starting new session with message: {args.message}")
-        thread_id = start_session(
-            initial_message=args.message,
-            store_client=store_client,
-            category=args.category,
-            version=args.version,
-        )
-        print(f"Session started with thread ID: {thread_id}")
+        # Use store_client as context manager
+        with MessageDBClient(_convert_db_config(config)) as store_client:
+            # Start the session
+            print(f"Starting new session with message: {args.message}")
+            thread_id = start_session(
+                initial_message=args.message,
+                store_client=store_client,
+                category=args.category,
+                version=args.version,
+            )
+            print(f"Session started with thread ID: {thread_id}")
 
-        # Build stream name
-        stream_name = build_stream_name(args.category, args.version, thread_id)
+            # Build stream name
+            stream_name = build_stream_name(args.category, args.version, thread_id)
 
-        # Process the session
-        max_iterations = (
-            args.max_iterations if args.max_iterations else config.processing.max_iterations
-        )
-        print(f"Processing session (max {max_iterations} iterations)...")
+            # Process the session
+            max_iterations = (
+                args.max_iterations if args.max_iterations else config.processing.max_iterations
+            )
+            print(f"Processing session (max {max_iterations} iterations)...")
 
-        final_state = process_thread(
-            thread_id=thread_id,
-            stream_name=stream_name,
-            store_client=store_client,
-            llm_client=llm_client,
-            tool_registry=tool_registry,
-            max_iterations=max_iterations,
-        )
+            final_state = process_thread(
+                thread_id=thread_id,
+                stream_name=stream_name,
+                store_client=store_client,
+                llm_client=llm_client,
+                tool_registry=tool_registry,
+                max_iterations=max_iterations,
+            )
 
-        # Display results
-        print("\n" + "=" * 80)
-        print("SESSION COMPLETE")
-        print("=" * 80)
-        print(f"Thread ID: {thread_id}")
-        print(f"Status: {final_state.status.value}")
-        print(f"Messages: {final_state.message_count}")
-        print(f"LLM Calls: {final_state.llm_call_count}")
-        print(f"Tool Calls: {final_state.tool_call_count}")
-        print(f"Errors: {final_state.error_count}")
+            # Display results
+            print("\n" + "=" * 80)
+            print("SESSION COMPLETE")
+            print("=" * 80)
+            print(f"Thread ID: {thread_id}")
+            print(f"Status: {final_state.status.value}")
+            print(f"Messages: {final_state.message_count}")
+            print(f"LLM Calls: {final_state.llm_call_count}")
+            print(f"Tool Calls: {final_state.tool_call_count}")
+            print(f"Errors: {final_state.error_count}")
 
-        if final_state.session_start_time and final_state.session_end_time:
-            duration = (
-                final_state.session_end_time - final_state.session_start_time
-            ).total_seconds()
-            print(f"Duration: {duration:.2f}s")
+            if final_state.session_start_time and final_state.session_end_time:
+                duration = (
+                    final_state.session_end_time - final_state.session_start_time
+                ).total_seconds()
+                print(f"Duration: {duration:.2f}s")
 
         return 0
 
@@ -255,55 +256,56 @@ def cmd_continue(args: argparse.Namespace, config: Config) -> int:
     """
     try:
         # Initialize clients
-        store_client = MessageDBClient(_convert_db_config(config))
         llm_client = create_llm_client(config.vertex_ai)
 
         # Initialize tool registry with builtin tools
         tool_registry = ToolRegistry()
         register_builtin_tools(tool_registry)
 
-        # Build stream name
-        stream_name = build_stream_name(args.category, args.version, args.thread_id)
+        # Use store_client as context manager
+        with MessageDBClient(_convert_db_config(config)) as store_client:
+            # Build stream name
+            stream_name = build_stream_name(args.category, args.version, args.thread_id)
 
-        # Check if session exists
-        events = read_stream(store_client, stream_name)
-        if not events:
-            print(f"Error: No session found with thread ID: {args.thread_id}", file=sys.stderr)
-            return 1
+            # Check if session exists
+            events = read_stream(store_client, stream_name)
+            if not events:
+                print(f"Error: No session found with thread ID: {args.thread_id}", file=sys.stderr)
+                return 1
 
-        print(f"Continuing session: {args.thread_id}")
+            print(f"Continuing session: {args.thread_id}")
 
-        # Process the session
-        max_iterations = (
-            args.max_iterations if args.max_iterations else config.processing.max_iterations
-        )
-        print(f"Processing session (max {max_iterations} iterations)...")
+            # Process the session
+            max_iterations = (
+                args.max_iterations if args.max_iterations else config.processing.max_iterations
+            )
+            print(f"Processing session (max {max_iterations} iterations)...")
 
-        final_state = process_thread(
-            thread_id=args.thread_id,
-            stream_name=stream_name,
-            store_client=store_client,
-            llm_client=llm_client,
-            tool_registry=tool_registry,
-            max_iterations=max_iterations,
-        )
+            final_state = process_thread(
+                thread_id=args.thread_id,
+                stream_name=stream_name,
+                store_client=store_client,
+                llm_client=llm_client,
+                tool_registry=tool_registry,
+                max_iterations=max_iterations,
+            )
 
-        # Display results
-        print("\n" + "=" * 80)
-        print("SESSION COMPLETE")
-        print("=" * 80)
-        print(f"Thread ID: {args.thread_id}")
-        print(f"Status: {final_state.status.value}")
-        print(f"Messages: {final_state.message_count}")
-        print(f"LLM Calls: {final_state.llm_call_count}")
-        print(f"Tool Calls: {final_state.tool_call_count}")
-        print(f"Errors: {final_state.error_count}")
+            # Display results
+            print("\n" + "=" * 80)
+            print("SESSION COMPLETE")
+            print("=" * 80)
+            print(f"Thread ID: {args.thread_id}")
+            print(f"Status: {final_state.status.value}")
+            print(f"Messages: {final_state.message_count}")
+            print(f"LLM Calls: {final_state.llm_call_count}")
+            print(f"Tool Calls: {final_state.tool_call_count}")
+            print(f"Errors: {final_state.error_count}")
 
-        if final_state.session_start_time and final_state.session_end_time:
-            duration = (
-                final_state.session_end_time - final_state.session_start_time
-            ).total_seconds()
-            print(f"Duration: {duration:.2f}s")
+            if final_state.session_start_time and final_state.session_end_time:
+                duration = (
+                    final_state.session_end_time - final_state.session_start_time
+                ).total_seconds()
+                print(f"Duration: {duration:.2f}s")
 
         return 0
 
@@ -324,69 +326,70 @@ def cmd_message(args: argparse.Namespace, config: Config) -> int:
     """
     try:
         # Initialize clients
-        store_client = MessageDBClient(_convert_db_config(config))
         llm_client = create_llm_client(config.vertex_ai)
 
         # Initialize tool registry with builtin tools
         tool_registry = ToolRegistry()
         register_builtin_tools(tool_registry)
 
-        # Build stream name
-        stream_name = build_stream_name(args.category, args.version, args.thread_id)
+        # Use store_client as context manager
+        with MessageDBClient(_convert_db_config(config)) as store_client:
+            # Build stream name
+            stream_name = build_stream_name(args.category, args.version, args.thread_id)
 
-        # Check if session exists
-        events = read_stream(store_client, stream_name)
-        if not events:
-            print(
-                f"Error: No session found with thread ID: {args.thread_id}",
-                file=sys.stderr,
+            # Check if session exists
+            events = read_stream(store_client, stream_name)
+            if not events:
+                print(
+                    f"Error: No session found with thread ID: {args.thread_id}",
+                    file=sys.stderr,
+                )
+                return 1
+
+            print(f"Adding message to session: {args.thread_id}")
+            print(f"Message: {args.message}")
+
+            # Add user message to the stream
+            position = add_user_message(
+                thread_id=args.thread_id,
+                message=args.message,
+                store_client=store_client,
+                category=args.category,
+                version=args.version,
             )
-            return 1
+            print(f"Message added at position: {position}")
 
-        print(f"Adding message to session: {args.thread_id}")
-        print(f"Message: {args.message}")
+            # Process the session
+            max_iterations = (
+                args.max_iterations if args.max_iterations else config.processing.max_iterations
+            )
+            print(f"Processing session (max {max_iterations} iterations)...")
 
-        # Add user message to the stream
-        position = add_user_message(
-            thread_id=args.thread_id,
-            message=args.message,
-            store_client=store_client,
-            category=args.category,
-            version=args.version,
-        )
-        print(f"Message added at position: {position}")
+            final_state = process_thread(
+                thread_id=args.thread_id,
+                stream_name=stream_name,
+                store_client=store_client,
+                llm_client=llm_client,
+                tool_registry=tool_registry,
+                max_iterations=max_iterations,
+            )
 
-        # Process the session
-        max_iterations = (
-            args.max_iterations if args.max_iterations else config.processing.max_iterations
-        )
-        print(f"Processing session (max {max_iterations} iterations)...")
+            # Display results
+            print("\n" + "=" * 80)
+            print("SESSION COMPLETE")
+            print("=" * 80)
+            print(f"Thread ID: {args.thread_id}")
+            print(f"Status: {final_state.status.value}")
+            print(f"Messages: {final_state.message_count}")
+            print(f"LLM Calls: {final_state.llm_call_count}")
+            print(f"Tool Calls: {final_state.tool_call_count}")
+            print(f"Errors: {final_state.error_count}")
 
-        final_state = process_thread(
-            thread_id=args.thread_id,
-            stream_name=stream_name,
-            store_client=store_client,
-            llm_client=llm_client,
-            tool_registry=tool_registry,
-            max_iterations=max_iterations,
-        )
-
-        # Display results
-        print("\n" + "=" * 80)
-        print("SESSION COMPLETE")
-        print("=" * 80)
-        print(f"Thread ID: {args.thread_id}")
-        print(f"Status: {final_state.status.value}")
-        print(f"Messages: {final_state.message_count}")
-        print(f"LLM Calls: {final_state.llm_call_count}")
-        print(f"Tool Calls: {final_state.tool_call_count}")
-        print(f"Errors: {final_state.error_count}")
-
-        if final_state.session_start_time and final_state.session_end_time:
-            duration = (
-                final_state.session_end_time - final_state.session_start_time
-            ).total_seconds()
-            print(f"Duration: {duration:.2f}s")
+            if final_state.session_start_time and final_state.session_end_time:
+                duration = (
+                    final_state.session_end_time - final_state.session_start_time
+                ).total_seconds()
+                print(f"Duration: {duration:.2f}s")
 
         return 0
 
@@ -406,21 +409,20 @@ def cmd_show(args: argparse.Namespace, config: Config) -> int:
         Exit code (0 for success, non-zero for error)
     """
     try:
-        # Initialize store client
-        store_client = MessageDBClient(_convert_db_config(config))
+        # Use store_client as context manager
+        with MessageDBClient(_convert_db_config(config)) as store_client:
+            # Build stream name
+            stream_name = build_stream_name(args.category, args.version, args.thread_id)
 
-        # Build stream name
-        stream_name = build_stream_name(args.category, args.version, args.thread_id)
+            # Read messages and convert to events
+            messages = read_stream(store_client, stream_name)
 
-        # Read messages and convert to events
-        messages = read_stream(store_client, stream_name)
+            if not messages:
+                print(f"No events found for thread ID: {args.thread_id}", file=sys.stderr)
+                return 1
 
-        if not messages:
-            print(f"No events found for thread ID: {args.thread_id}", file=sys.stderr)
-            return 1
-
-        # Convert messages to events for projection
-        events = [_message_to_event(msg) for msg in messages]
+            # Convert messages to events for projection
+            events = [_message_to_event(msg) for msg in messages]
 
         # Output based on format
         if args.format == "json":
@@ -499,93 +501,92 @@ def cmd_list(args: argparse.Namespace, config: Config) -> int:
         Exit code (0 for success, non-zero for error)
     """
     try:
-        # Initialize store client
-        store_client = MessageDBClient(_convert_db_config(config))
+        # Use store_client as context manager
+        with MessageDBClient(_convert_db_config(config)) as store_client:
+            # Query all streams for this category
+            # We'll use get_category_messages to find all sessions
+            category_pattern = f"{args.category}:{args.version}"
 
-        # Query all streams for this category
-        # We'll use get_category_messages to find all sessions
-        category_pattern = f"{args.category}:{args.version}"
-
-        with store_client as conn:
-            with conn.cursor() as cur:  # type: ignore[attr-defined]
-                # Get all distinct streams in this category
-                # We query the messages table directly to find unique stream names
-                cur.execute(
-                    """
-                    SELECT DISTINCT stream_name, MAX(time) as last_activity
-                    FROM message_store.messages
-                    WHERE stream_name LIKE %s
-                    GROUP BY stream_name
-                    ORDER BY last_activity DESC
-                    LIMIT %s
-                    """,
-                    (f"{category_pattern}-%", args.limit),
-                )
-
-                streams: list[tuple[str, Any]] = cur.fetchall()  # type: ignore[assignment]
-
-        if not streams:
-            print(f"No sessions found for category: {args.category}:{args.version}")
-            return 0
-
-        # Output based on format
-        if args.format == "json":
-            # JSON format - get full session state for each stream
-            sessions_data: list[dict[str, Any]] = []
-            for stream_name, last_activity in streams:  # type: ignore[misc]
-                messages = read_stream(store_client, stream_name)
-                if messages:
-                    events = [_message_to_event(msg) for msg in messages]
-                    session_state = project_to_session_state(events)
-                    sessions_data.append(
-                        {
-                            "thread_id": session_state.thread_id,
-                            "stream_name": stream_name,
-                            "status": session_state.status.value,
-                            "message_count": session_state.message_count,
-                            "llm_call_count": session_state.llm_call_count,
-                            "tool_call_count": session_state.tool_call_count,
-                            "error_count": session_state.error_count,
-                            "last_activity": last_activity.isoformat(),
-                            "start_time": (
-                                session_state.session_start_time.isoformat()
-                                if session_state.session_start_time
-                                else None
-                            ),
-                            "end_time": (
-                                session_state.session_end_time.isoformat()
-                                if session_state.session_end_time
-                                else None
-                            ),
-                        }
+            with store_client as conn:
+                with conn.cursor() as cur:  # type: ignore[attr-defined]
+                    # Get all distinct streams in this category
+                    # We query the messages table directly to find unique stream names
+                    cur.execute(
+                        """
+                        SELECT DISTINCT stream_name, MAX(time) as last_activity
+                        FROM message_store.messages
+                        WHERE stream_name LIKE %s
+                        GROUP BY stream_name
+                        ORDER BY last_activity DESC
+                        LIMIT %s
+                        """,
+                        (f"{category_pattern}-%", args.limit),
                     )
 
-            print(json.dumps(sessions_data, indent=2))
+                    streams: list[tuple[str, Any]] = cur.fetchall()  # type: ignore[assignment]
 
-        else:
-            # Text format
-            print(f"Recent sessions (category: {args.category}:{args.version})")
-            print("=" * 80)
-            print(f"{'Thread ID':<40} {'Status':<12} {'Messages':<10} {'Last Activity':<20}")
-            print("=" * 80)
+            if not streams:
+                print(f"No sessions found for category: {args.category}:{args.version}")
+                return 0
 
-            for stream_name, last_activity in streams:  # type: ignore[misc]
-                # Extract thread_id from stream_name
-                # Format: category:version-thread_id
-                parts: list[str] = stream_name.split("-", 1)  # type: ignore[assignment]
-                if len(parts) == 2:
-                    thread_id = parts[1]
-
-                    # Get session state
+            # Output based on format
+            if args.format == "json":
+                # JSON format - get full session state for each stream
+                sessions_data: list[dict[str, Any]] = []
+                for stream_name, last_activity in streams:  # type: ignore[misc]
                     messages = read_stream(store_client, stream_name)
                     if messages:
                         events = [_message_to_event(msg) for msg in messages]
                         session_state = project_to_session_state(events)
-                        last_activity_str = last_activity.strftime("%Y-%m-%d %H:%M:%S")
-                        print(
-                            f"{thread_id:<40} {session_state.status.value:<12} "
-                            f"{session_state.message_count:<10} {last_activity_str:<20}"
+                        sessions_data.append(
+                            {
+                                "thread_id": session_state.thread_id,
+                                "stream_name": stream_name,
+                                "status": session_state.status.value,
+                                "message_count": session_state.message_count,
+                                "llm_call_count": session_state.llm_call_count,
+                                "tool_call_count": session_state.tool_call_count,
+                                "error_count": session_state.error_count,
+                                "last_activity": last_activity.isoformat(),
+                                "start_time": (
+                                    session_state.session_start_time.isoformat()
+                                    if session_state.session_start_time
+                                    else None
+                                ),
+                                "end_time": (
+                                    session_state.session_end_time.isoformat()
+                                    if session_state.session_end_time
+                                    else None
+                                ),
+                            }
                         )
+
+                print(json.dumps(sessions_data, indent=2))
+
+            else:
+                # Text format
+                print(f"Recent sessions (category: {args.category}:{args.version})")
+                print("=" * 80)
+                print(f"{'Thread ID':<40} {'Status':<12} {'Messages':<10} {'Last Activity':<20}")
+                print("=" * 80)
+
+                for stream_name, last_activity in streams:  # type: ignore[misc]
+                    # Extract thread_id from stream_name
+                    # Format: category:version-thread_id
+                    parts: list[str] = stream_name.split("-", 1)  # type: ignore[assignment]
+                    if len(parts) == 2:
+                        thread_id = parts[1]
+
+                        # Get session state
+                        messages = read_stream(store_client, stream_name)
+                        if messages:
+                            events = [_message_to_event(msg) for msg in messages]
+                            session_state = project_to_session_state(events)
+                            last_activity_str = last_activity.strftime("%Y-%m-%d %H:%M:%S")
+                            print(
+                                f"{thread_id:<40} {session_state.status.value:<12} "
+                                f"{session_state.message_count:<10} {last_activity_str:<20}"
+                            )
 
         return 0
 
