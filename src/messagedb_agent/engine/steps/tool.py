@@ -125,7 +125,7 @@ def execute_tool_step(
                     "tool_name": tool_name,
                     "arguments": arguments,
                 },
-                metadata={"tool_id": tool_id, "tool_index": i},
+                metadata={"tool_id": tool_id, "tool_call_id": tool_id, "tool_index": i},
             )
             log_tool.debug(
                 "ToolExecutionRequested event written",
@@ -157,7 +157,7 @@ def execute_tool_step(
                         "result": result.result,
                         "execution_time_ms": result.execution_time_ms,
                     },
-                    metadata={"tool_id": tool_id, "tool_index": i},
+                    metadata={"tool_id": tool_id, "tool_call_id": tool_id, "tool_index": i},
                 )
                 log_tool.info(
                     "ToolExecutionCompleted event written",
@@ -187,7 +187,7 @@ def execute_tool_step(
                         "error_message": result.error or "Unknown error",
                         "retry_count": 0,  # No retries in basic implementation
                     },
-                    metadata={"tool_id": tool_id, "tool_index": i},
+                    metadata={"tool_id": tool_id, "tool_call_id": tool_id, "tool_index": i},
                 )
                 log_tool.info(
                     "ToolExecutionFailed event written",

@@ -38,10 +38,10 @@ Example:
 from enum import Enum
 from typing import Any
 
-from messagedb_agent.events.agent import LLM_RESPONSE_RECEIVED
+from messagedb_agent.events.agent import LLM_CALL_FAILED, LLM_RESPONSE_RECEIVED
 from messagedb_agent.events.base import BaseEvent
 from messagedb_agent.events.system import SESSION_COMPLETED
-from messagedb_agent.events.tool import TOOL_EXECUTION_COMPLETED
+from messagedb_agent.events.tool import TOOL_EXECUTION_COMPLETED, TOOL_EXECUTION_FAILED
 from messagedb_agent.events.user import SESSION_TERMINATION_REQUESTED, USER_MESSAGE_ADDED
 
 
@@ -69,7 +69,9 @@ def project_to_next_step(events: list[BaseEvent]) -> tuple[StepType, dict[str, A
     - UserMessageAdded -> LLM_CALL (process user's message)
     - LLMResponseReceived with tool_calls -> TOOL_EXECUTION (execute tools)
     - LLMResponseReceived without tool_calls -> LLM_CALL (generate response)
+    - LLMCallFailed -> TERMINATION (LLM call failed after retries)
     - ToolExecutionCompleted -> LLM_CALL (process tool results)
+    - ToolExecutionFailed -> TERMINATION (tool execution failed)
     - SessionTerminationRequested -> TERMINATION (end session)
     - SessionCompleted -> TERMINATION (already ended)
 
@@ -122,9 +124,25 @@ def project_to_next_step(events: list[BaseEvent]) -> tuple[StepType, dict[str, A
             # This allows the agent to respond to the user after generating text
             return (StepType.LLM_CALL, {"reason": "llm_response_without_tools"})
 
+    elif last_event.type == LLM_CALL_FAILED:
+        # LLM call failed after all retries, terminate session
+        data = last_event.data
+        error_message = data.get("error_message", "Unknown error")
+        return (StepType.TERMINATION, {"reason": f"llm_call_failed: {error_message}"})
+
     elif last_event.type == TOOL_EXECUTION_COMPLETED:
         # Tool execution finished, call LLM to process results
         return (StepType.LLM_CALL, {"reason": "tool_execution_completed"})
+
+    elif last_event.type == TOOL_EXECUTION_FAILED:
+        # Tool execution failed, terminate session
+        data = last_event.data
+        error_message = data.get("error_message", "Unknown error")
+        tool_name = data.get("tool_name", "unknown_tool")
+        return (
+            StepType.TERMINATION,
+            {"reason": f"tool_execution_failed: {tool_name} - {error_message}"},
+        )
 
     elif last_event.type == SESSION_TERMINATION_REQUESTED:
         # User requested termination
