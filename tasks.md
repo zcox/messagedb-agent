@@ -605,6 +605,105 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - How to debug projection functions
   - How to replay sessions
 
+## Phase 13: Message DB Subscriber Framework
+
+### 13. Subscriber Implementation
+
+**Background:** Message DB provides `get_category_messages()` to retrieve messages from a category (not just a single stream). This enables pub/sub patterns where subscribers can poll for new messages across all streams in a category and react to them. This is useful for real-time monitoring, triggering side effects, and distributed event processing.
+
+**Documentation:** [Message DB Server Functions](https://docs.eventide-project.org/user-guide/message-db/server-functions.html)
+
+- [ ] **Task 13.1: Implement get_category_messages function**
+  - Create `src/messagedb_agent/store/category.py`
+  - Implement `get_category_messages(category, position=0, batch_size=1000, correlation=None, consumer_group_member=None, consumer_group_size=None, condition=None)`
+  - Returns List[Event] similar to read_stream
+  - Uses `message_store.get_category_messages()` stored procedure
+  - Support all optional parameters for filtering and consumer groups
+  - Deserialize JSON data and metadata
+  - Handle empty results gracefully
+  - Add comprehensive tests in `tests/store/test_category.py`
+  - Export function from store module
+
+- [ ] **Task 13.2: Create generic subscriber framework**
+  - Create `src/messagedb_agent/subscriber/base.py`
+  - Define `MessageHandler` protocol/type: `Callable[[Event], None]` or `Callable[[Event], Awaitable[None]]`
+  - Define `Subscriber` class with:
+    - `__init__(category, handler, store_client, poll_interval_ms=100, batch_size=1000)`
+    - `start()` method - begins polling loop
+    - `stop()` method - graceful shutdown
+    - Internal position tracking (starts at 0, updates after each batch)
+    - Error handling - log errors but continue processing
+    - Support for synchronous and asynchronous handlers
+  - Implement polling loop:
+    - Call `get_category_messages(category, position, batch_size)`
+    - For each message: call `handler(event)`
+    - Update position to highest global_position seen + 1
+    - Sleep for poll_interval_ms
+    - Check for stop signal
+  - Create `SubscriberError` exception class
+  - Add comprehensive tests in `tests/subscriber/test_base.py`
+  - Export Subscriber and MessageHandler from subscriber module
+
+- [ ] **Task 13.3: Add position persistence for subscribers**
+  - Create `src/messagedb_agent/subscriber/position.py`
+  - Define `PositionStore` abstract base class with:
+    - `get_position(subscriber_id) -> int`
+    - `update_position(subscriber_id, position) -> None`
+  - Implement `InMemoryPositionStore` for testing
+  - Implement `MessageDBPositionStore` that stores position in a stream
+    - Stream format: `subscriberPosition-{subscriber_id}`
+    - Event type: `PositionUpdated`
+    - Read latest event to get position
+    - Write new event to update position
+  - Update Subscriber class to accept optional position_store
+  - If position_store provided, load initial position and save after each batch
+  - Add tests for both position store implementations
+  - Export position store classes from subscriber module
+
+- [ ] **Task 13.4: Create event-specific subscriber helpers**
+  - Create `src/messagedb_agent/subscriber/handlers.py`
+  - Implement `print_event_handler(event)` - pretty-print events to console
+  - Implement `filter_handler(predicate, handler)` - only call handler if predicate(event) is True
+  - Implement `event_type_router(handlers_map)` - route events to handlers based on event type
+    - `handlers_map: dict[str, MessageHandler]` maps event type to handler
+  - Implement `log_event_handler(logger)` - log events using structlog
+  - Create `ConversationPrinter` class for pretty-printing LLM conversations:
+    - `__init__(show_tool_calls=True, show_tool_results=True, show_system=False)`
+    - `__call__(event)` - prints user messages, LLM responses, tool calls/results
+    - Formats output for human readability (colors optional)
+  - Add tests in `tests/subscriber/test_handlers.py`
+  - Export all handlers from subscriber module
+
+- [ ] **Task 13.5: Add CLI subscriber command**
+  - Update `src/messagedb_agent/cli.py`
+  - Add new command: `subscribe <category> [--thread-id THREAD_ID]`
+  - Options:
+    - `--thread-id`: Subscribe to specific thread (filters by stream name)
+    - `--from-start`: Start from position 0 (default: start from end)
+    - `--event-types`: Comma-separated list of event types to show
+    - `--format`: Output format (text, json, pretty)
+  - Implementation:
+    - Create Subscriber with appropriate filters
+    - Use ConversationPrinter for text/pretty formats
+    - Use JSON printer for json format
+    - If --thread-id provided, use filter_handler to only process events from that stream
+    - If --event-types provided, use event_type_router to filter
+    - Handle Ctrl+C gracefully (call subscriber.stop())
+  - Update CLI tests to cover subscribe command
+  - Update help text and CLI documentation
+
+- [ ] **Task 13.6: Add real-time monitoring to existing CLI commands**
+  - Update `start` and `continue` commands to optionally use subscriber
+  - Add `--follow` / `-f` flag to these commands
+  - When --follow is enabled:
+    - Start session or continue processing in background (or separate process)
+    - Start subscriber for the thread's stream
+    - Print events in real-time as they're written
+    - Continue until SessionCompleted event received
+  - This provides "live" output similar to `docker logs -f` or `tail -f`
+  - Add tests for --follow functionality
+  - Update CLI documentation
+
 ## Phase 12: Polish and Deployment Prep
 
 ### 12. Final Steps
@@ -733,13 +832,22 @@ Recommended implementation order for complete system:
 
 ## Progress Tracking
 
-- Total Tasks: 78
+- Total Tasks: 84 (added Phase 13: Subscriber Framework - 6 tasks)
 - Completed: 33 (Tasks 1.1-1.3, 2.1-2.4, 3.1-3.5, 4.1-4.5, 5.1-5.4, 6.1-6.4, 7.1-7.5, 9.2, 10.2)
 - In Progress: 0
-- Remaining: 45
-- Completion: 42.3%
+- Remaining: 51
+- Completion: 39.3%
 
 Last Updated: 2025-10-19
+
+**Recent Changes:**
+- **Phase 13 ADDED**: Message DB Subscriber Framework (6 new tasks)
+  - Task 13.1: Implement get_category_messages() for reading messages across all streams in a category
+  - Task 13.2: Create generic Subscriber class with polling loop and message handlers
+  - Task 13.3: Add position persistence for subscribers (in-memory and Message DB backed)
+  - Task 13.4: Create event-specific subscriber helpers (filters, routers, ConversationPrinter)
+  - Task 13.5: Add CLI `subscribe` command for real-time monitoring
+  - Task 13.6: Add `--follow` flag to existing CLI commands for live output
 
 **Recent Completions:**
 - Task 9.2: Create CLI interface (COMPLETE)
