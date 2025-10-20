@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 
 import structlog
 
-from messagedb_agent.events.system import SESSION_STARTED
+from messagedb_agent.events.system import SESSION_COMPLETED, SESSION_STARTED
 from messagedb_agent.events.user import USER_MESSAGE_ADDED
 from messagedb_agent.store import MessageDBClient, build_stream_name, generate_thread_id
 from messagedb_agent.store.operations import write_message
@@ -143,3 +143,98 @@ def start_session(
         raise SessionError(f"Failed to write UserMessageAdded event: {e}") from e
 
     return thread_id
+
+
+def terminate_session(
+    thread_id: str,
+    reason: str,
+    store_client: MessageDBClient,
+    category: str = "agent",
+    version: str = "v0",
+) -> int:
+    """Terminate an agent session gracefully.
+
+    This function terminates an existing session by:
+    1. Building the stream name from thread_id
+    2. Writing a SessionCompleted event with the termination reason
+    3. Returning the position of the written event
+
+    Args:
+        thread_id: The thread ID of the session to terminate
+        reason: The reason for termination (e.g., "success", "failure", "timeout", "user_request")
+        store_client: Connected MessageDB client for writing events
+        category: Stream category (default: "agent")
+        version: Stream version (default: "v0")
+
+    Returns:
+        The position of the SessionCompleted event in the stream
+
+    Raises:
+        SessionError: If event writing fails or other critical error occurs
+        ValueError: If thread_id or reason is empty or whitespace-only
+
+    Example:
+        ```python
+        from messagedb_agent.store import MessageDBClient, MessageDBConfig
+        from messagedb_agent.engine.session import start_session, terminate_session
+
+        config = MessageDBConfig()
+        with MessageDBClient(config) as store_client:
+            # Start session
+            thread_id = start_session(
+                initial_message="Hello!",
+                store_client=store_client
+            )
+
+            # ... process the session ...
+
+            # Terminate session
+            position = terminate_session(
+                thread_id=thread_id,
+                reason="success",
+                store_client=store_client
+            )
+            print(f"Session terminated at position: {position}")
+        ```
+    """
+    # Validate inputs
+    if not thread_id or not thread_id.strip():
+        raise ValueError("thread_id cannot be empty or whitespace-only")
+
+    if not reason or not reason.strip():
+        raise ValueError("reason cannot be empty or whitespace-only")
+
+    log = logger.bind(
+        thread_id=thread_id,
+        reason=reason,
+        category=category,
+        version=version,
+    )
+
+    log.info("Terminating session")
+
+    # Step 1: Build stream name
+    stream_name = build_stream_name(category, version, thread_id)
+    log = log.bind(stream_name=stream_name)
+
+    log.debug("Built stream name")
+
+    # Step 2: Write SessionCompleted event
+    try:
+        position = write_message(
+            client=store_client,
+            stream_name=stream_name,
+            message_type=SESSION_COMPLETED,
+            data={
+                "completion_reason": reason,
+            },
+            metadata={},
+        )
+        log.info(
+            "Session terminated successfully",
+            position=position,
+        )
+        return position
+    except Exception as e:
+        log.error("Failed to write SessionCompleted event", error=str(e))
+        raise SessionError(f"Failed to write SessionCompleted event: {e}") from e

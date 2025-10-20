@@ -397,10 +397,20 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
     - 100% code coverage on session.py
   - All 524 unit tests passing, 84% overall coverage
 
-- [ ] **Task 7.5: Implement session termination**
-  - Add `terminate_session(thread_id, reason, store_client)` to session.py
-  - Write SessionCompleted event with reason
-  - Handle graceful shutdown
+- [x] **Task 7.5: Implement session termination** (COMPLETE)
+  - Added `terminate_session(thread_id, reason, store_client, category, version)` to session.py
+  - Writes SessionCompleted event with termination reason
+  - Handles graceful shutdown by writing final event to stream
+  - Validates thread_id and reason are not empty or whitespace-only
+  - Supports custom category and version (defaults: "agent", "v0")
+  - Returns position of SessionCompleted event in stream
+  - Exported terminate_session from engine module
+  - Created comprehensive test suite in `tests/engine/test_session.py`:
+    - Added 14 tests for terminate_session (30 total session tests)
+    - Tests cover: success, validation, error handling, various reasons
+    - Tests event structure, position tracking, special cases
+    - 100% code coverage on session.py
+  - All 538 unit tests passing, 84% overall coverage
 
 ## Phase 8: Observability
 
@@ -719,14 +729,21 @@ Recommended implementation order for complete system:
 ## Progress Tracking
 
 - Total Tasks: 78
-- Completed: 31 (Tasks 1.1-1.3, 2.1-2.4, 3.1-3.5, 4.1-4.5, 5.1-5.4, 6.1-6.4, 7.1-7.4, 10.2)
+- Completed: 32 (Tasks 1.1-1.3, 2.1-2.4, 3.1-3.5, 4.1-4.5, 5.1-5.4, 6.1-6.4, 7.1-7.5, 10.2)
 - In Progress: 0
-- Remaining: 47
-- Completion: 39.7%
+- Remaining: 46
+- Completion: 41.0%
 
 Last Updated: 2025-10-19
 
 **Recent Completions:**
+- Task 7.5: Implement session termination (COMPLETE - Phase 7 COMPLETE! 🎉)
+  - Added terminate_session() function for graceful session shutdown
+  - Writes SessionCompleted event with termination reason
+  - Validates inputs and handles errors gracefully
+  - 14 comprehensive tests with 100% coverage on session.py
+  - All 538 unit tests passing, 84% overall coverage
+  - **Phase 7 (Processing Engine) is now complete!** All 5 tasks done.
 - Task 7.4: Implement session initialization (COMPLETE)
   - Created start_session() function that initializes new agent sessions
   - Generates thread_id, builds stream_name, writes SessionStarted and UserMessageAdded events

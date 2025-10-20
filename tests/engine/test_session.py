@@ -6,8 +6,8 @@ from uuid import UUID
 
 import pytest
 
-from messagedb_agent.engine.session import SessionError, start_session
-from messagedb_agent.events.system import SESSION_STARTED
+from messagedb_agent.engine.session import SessionError, start_session, terminate_session
+from messagedb_agent.events.system import SESSION_COMPLETED, SESSION_STARTED
 from messagedb_agent.events.user import USER_MESSAGE_ADDED
 
 
@@ -232,3 +232,180 @@ class TestStartSession:
         user_message_call = mock_write.call_args_list[1][1]
         assert user_message_call["data"]["message"] == long_message
         assert len(user_message_call["data"]["message"]) == 10000
+
+
+class TestTerminateSession:
+    """Tests for the terminate_session function."""
+
+    @pytest.fixture
+    def mock_store_client(self):
+        """Create a mock MessageDB store client."""
+        return MagicMock()
+
+    def test_successful_session_termination(self, mock_store_client):
+        """Test that terminate_session successfully terminates a session."""
+        thread_id = "test-thread-123"
+        reason = "success"
+
+        with patch("messagedb_agent.engine.session.write_message", return_value=5) as mock_write:
+            position = terminate_session(
+                thread_id=thread_id, reason=reason, store_client=mock_store_client
+            )
+
+        # Verify position returned
+        assert position == 5
+
+        # Verify write_message was called once
+        assert mock_write.call_count == 1
+
+        # Verify SessionCompleted event written
+        call_args = mock_write.call_args[1]
+        assert call_args["stream_name"] == f"agent:v0-{thread_id}"
+        assert call_args["message_type"] == SESSION_COMPLETED
+        assert call_args["data"]["completion_reason"] == reason
+
+    def test_uses_default_category_and_version(self, mock_store_client):
+        """Test that default category and version are used."""
+        thread_id = "test-123"
+
+        with patch("messagedb_agent.engine.session.write_message", return_value=0) as mock_write:
+            terminate_session(thread_id=thread_id, reason="success", store_client=mock_store_client)
+
+        # Verify default stream name format
+        stream_name = mock_write.call_args[1]["stream_name"]
+        assert stream_name == f"agent:v0-{thread_id}"
+
+    def test_uses_custom_category_and_version(self, mock_store_client):
+        """Test that custom category and version can be specified."""
+        thread_id = "test-123"
+
+        with patch("messagedb_agent.engine.session.write_message", return_value=0) as mock_write:
+            terminate_session(
+                thread_id=thread_id,
+                reason="success",
+                store_client=mock_store_client,
+                category="custom",
+                version="v1",
+            )
+
+        # Verify custom stream name format
+        stream_name = mock_write.call_args[1]["stream_name"]
+        assert stream_name == f"custom:v1-{thread_id}"
+
+    def test_validates_empty_thread_id(self, mock_store_client):
+        """Test that empty thread_id raises ValueError."""
+        with pytest.raises(ValueError, match="thread_id cannot be empty"):
+            terminate_session(thread_id="", reason="success", store_client=mock_store_client)
+
+    def test_validates_whitespace_only_thread_id(self, mock_store_client):
+        """Test that whitespace-only thread_id raises ValueError."""
+        with pytest.raises(ValueError, match="thread_id cannot be empty"):
+            terminate_session(
+                thread_id="   \n\t  ", reason="success", store_client=mock_store_client
+            )
+
+    def test_validates_empty_reason(self, mock_store_client):
+        """Test that empty reason raises ValueError."""
+        with pytest.raises(ValueError, match="reason cannot be empty"):
+            terminate_session(thread_id="test-123", reason="", store_client=mock_store_client)
+
+    def test_validates_whitespace_only_reason(self, mock_store_client):
+        """Test that whitespace-only reason raises ValueError."""
+        with pytest.raises(ValueError, match="reason cannot be empty"):
+            terminate_session(
+                thread_id="test-123", reason="   \n\t  ", store_client=mock_store_client
+            )
+
+    def test_raises_error_if_event_write_fails(self, mock_store_client):
+        """Test that SessionError is raised if SessionCompleted event write fails."""
+        with patch(
+            "messagedb_agent.engine.session.write_message",
+            side_effect=Exception("Database error"),
+        ):
+            with pytest.raises(SessionError, match="Failed to write SessionCompleted event"):
+                terminate_session(
+                    thread_id="test-123", reason="success", store_client=mock_store_client
+                )
+
+    def test_various_termination_reasons(self, mock_store_client):
+        """Test that various termination reasons are handled correctly."""
+        reasons = ["success", "failure", "timeout", "user_request", "error", "custom_reason"]
+
+        for reason in reasons:
+            with patch(
+                "messagedb_agent.engine.session.write_message", return_value=0
+            ) as mock_write:
+                terminate_session(
+                    thread_id="test-123", reason=reason, store_client=mock_store_client
+                )
+
+                # Verify reason preserved
+                call_args = mock_write.call_args[1]
+                assert call_args["data"]["completion_reason"] == reason
+
+    def test_event_structure(self, mock_store_client):
+        """Test that SessionCompleted event has correct structure."""
+        thread_id = "test-123"
+        reason = "success"
+
+        with patch("messagedb_agent.engine.session.write_message", return_value=0) as mock_write:
+            terminate_session(thread_id=thread_id, reason=reason, store_client=mock_store_client)
+
+        # Verify event structure
+        call_args = mock_write.call_args[1]
+        assert call_args["client"] == mock_store_client
+        assert call_args["stream_name"] == f"agent:v0-{thread_id}"
+        assert call_args["message_type"] == SESSION_COMPLETED
+        assert call_args["data"] == {"completion_reason": reason}
+        assert call_args["metadata"] == {}
+
+    def test_returns_correct_position(self, mock_store_client):
+        """Test that terminate_session returns the correct event position."""
+        expected_positions = [0, 5, 10, 100]
+
+        for expected_pos in expected_positions:
+            with patch("messagedb_agent.engine.session.write_message", return_value=expected_pos):
+                actual_pos = terminate_session(
+                    thread_id="test-123", reason="success", store_client=mock_store_client
+                )
+                assert actual_pos == expected_pos
+
+    def test_long_reason_handling(self, mock_store_client):
+        """Test that very long reasons are handled correctly."""
+        long_reason = "A" * 1000  # 1k character reason
+
+        with patch("messagedb_agent.engine.session.write_message", return_value=0) as mock_write:
+            terminate_session(
+                thread_id="test-123", reason=long_reason, store_client=mock_store_client
+            )
+
+        # Verify long reason preserved
+        call_args = mock_write.call_args[1]
+        assert call_args["data"]["completion_reason"] == long_reason
+        assert len(call_args["data"]["completion_reason"]) == 1000
+
+    def test_special_characters_in_reason(self, mock_store_client):
+        """Test that reasons with special characters are preserved."""
+        special_reason = 'Error: "Connection failed" <timeout> & retry failed!'
+
+        with patch("messagedb_agent.engine.session.write_message", return_value=0) as mock_write:
+            terminate_session(
+                thread_id="test-123", reason=special_reason, store_client=mock_store_client
+            )
+
+        # Verify special characters preserved
+        call_args = mock_write.call_args[1]
+        assert call_args["data"]["completion_reason"] == special_reason
+
+    def test_multiline_reason(self, mock_store_client):
+        """Test that multiline reasons are preserved correctly."""
+        multiline_reason = "Line 1\nLine 2\nLine 3"
+
+        with patch("messagedb_agent.engine.session.write_message", return_value=0) as mock_write:
+            terminate_session(
+                thread_id="test-123", reason=multiline_reason, store_client=mock_store_client
+            )
+
+        # Verify multiline reason preserved
+        call_args = mock_write.call_args[1]
+        assert call_args["data"]["completion_reason"] == multiline_reason
