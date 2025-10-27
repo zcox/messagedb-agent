@@ -5,13 +5,13 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
 ## Phase 1: Project Foundation
 
 ### 1. Project Setup and Structure
-- [x] **Task 1.1: Initialize Python project with uv**
+- [x] **Task 1.1: Initialize Python project with uv** (`messagedb-agent-1`)
   - Create `pyproject.toml` with project metadata
   - Configure Python version (3.11+)
   - Set up project structure: `src/messagedb_agent/` as main package
   - Configure build system and dependencies in pyproject.toml
 
-- [x] **Task 1.2: Define project structure**
+- [x] **Task 1.2: Define project structure** (`messagedb-agent-2`)
   - Create directory structure:
     - `src/messagedb_agent/` - main package
     - `src/messagedb_agent/events/` - event definitions
@@ -22,7 +22,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
     - `src/messagedb_agent/engine/` - processing engine
     - `tests/` - test files mirroring src structure
 
-- [x] **Task 1.3: Add core dependencies**
+- [x] **Task 1.3: Add core dependencies** (`messagedb-agent-3`)
   - Add psycopg2-binary or psycopg3 for PostgreSQL/Message DB connection
   - Add google-cloud-aiplatform for Vertex AI integration
   - Add structlog for structured logging
@@ -37,7 +37,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
 [Message DB](https://github.com/message-db/message-db) documentation:
 - [Server Functions](https://docs.eventide-project.org/user-guide/message-db/server-functions.html)
 
-- [x] **Task 2.1: Create Message DB client**
+- [x] **Task 2.1: Create Message DB client** (`messagedb-agent-4`)
   - Implement `src/messagedb_agent/store/client.py`
   - Create MessageDBClient class with connection pooling
   - Configuration from environment variables (DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD)
@@ -45,7 +45,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - Add connection health check method
   - Added psycopg-pool dependency for connection pooling
 
-- [x] **Task 2.2: Implement write_event function**
+- [x] **Task 2.2: Implement write_event function** (`messagedb-agent-5`)
   - Create function to write events to Message DB using `write_message` stored procedure
   - Parameters: stream_name, event_type, data (dict), metadata (optional), expected_version (optional for OCC)
   - Serialize data to JSON
@@ -54,7 +54,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - Created OptimisticConcurrencyError exception class
   - Added comprehensive error handling and structured logging
 
-- [x] **Task 2.3: Implement read_stream function**
+- [x] **Task 2.3: Implement read_stream function** (`messagedb-agent-6`)
   - Created `Event` dataclass in `src/messagedb_agent/store/operations.py` to represent events
   - Implemented `read_stream` function using `message_store.get_stream_messages()`
   - Parameters: stream_name, position (optional, default 0), batch_size (optional, default 1000)
@@ -64,7 +64,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - Exported Event class and read_stream function from store module
   - NOTE: Must use `message_store.get_stream_messages()` with schema prefix - functions are in message_store schema
 
-- [x] **Task 2.4: Implement stream utilities**
+- [x] **Task 2.4: Implement stream utilities** (`messagedb-agent-7`)
   - Created `src/messagedb_agent/store/stream.py` with three core functions:
     - `generate_thread_id()`: Generates unique UUID4 thread identifiers
     - `build_stream_name(category, version, thread_id)`: Builds stream names in format `category:version-thread_id`
@@ -79,7 +79,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
 ## Phase 3: Event Schema and Types
 
 ### 3. Event Type Definitions
-- [x] **Task 3.1: Define base event structure**
+- [x] **Task 3.1: Define base event structure** (`messagedb-agent-8`)
   - Create `src/messagedb_agent/events/base.py`
   - Define BaseEvent dataclass/TypedDict with: id, type, data, metadata, position, time
   - Define EventData base class for type-safe event payloads
@@ -87,7 +87,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - Created EventData base class for type-safe event payloads
   - Added validation in __post_init__ for event type and positions
 
-- [x] **Task 3.2: Define User event types**
+- [x] **Task 3.2: Define User event types** (`messagedb-agent-9`)
   - Create `src/messagedb_agent/events/user.py`
   - Define UserMessageAdded event with payload: message (str), timestamp
   - Define SessionTerminationRequested event
@@ -96,7 +96,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - Added event type constants: USER_MESSAGE_ADDED, SESSION_TERMINATION_REQUESTED
   - Comprehensive validation for message content and ISO 8601 timestamps
 
-- [x] **Task 3.3: Define Agent event types**
+- [x] **Task 3.3: Define Agent event types** (`messagedb-agent-10`)
   - Create `src/messagedb_agent/events/agent.py`
   - Define LLMCallRequested event with payload: projected_context
   - Define LLMResponseReceived event with payload: response_text, tool_calls (list), model_name, token_usage
@@ -108,7 +108,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - Note: LLMCallRequested not implemented (not required for basic flow)
   - Validation ensures either response_text or tool_calls is present
 
-- [x] **Task 3.4: Define Tool event types**
+- [x] **Task 3.4: Define Tool event types** (`messagedb-agent-11`)
   - Create `src/messagedb_agent/events/tool.py`
   - Define ToolExecutionRequested event with payload: tool_name, arguments (dict)
   - Define ToolExecutionCompleted event with payload: tool_name, result, execution_time_ms
@@ -119,7 +119,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - Added event type constants: TOOL_EXECUTION_REQUESTED, TOOL_EXECUTION_COMPLETED, TOOL_EXECUTION_FAILED
   - Comprehensive validation for all fields (non-empty names, non-negative times/retries)
 
-- [x] **Task 3.5: Define System event types**
+- [x] **Task 3.5: Define System event types** (`messagedb-agent-12`)
   - Create `src/messagedb_agent/events/system.py`
   - Define SessionStarted event with payload: thread_id, initial_context (optional)
   - Define SessionCompleted event with payload: completion_reason (success/failure/timeout)
@@ -133,7 +133,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
 ## Phase 4: Projection Framework
 
 ### 4. Projection Functions
-- [x] **Task 4.1: Create projection base infrastructure**
+- [x] **Task 4.1: Create projection base infrastructure** (`messagedb-agent-13`)
   - Create `src/messagedb_agent/projections/base.py`
   - Define ProjectionFunction type: `Callable[[List[BaseEvent]], T]`
   - Create ProjectionResult generic type for typed projection outputs
@@ -143,7 +143,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - Implemented project_with_metadata() helper and compose_projections() utility
   - Added 20 comprehensive tests with 100% coverage
 
-- [x] **Task 4.2: Implement LLM Context projection**
+- [x] **Task 4.2: Implement LLM Context projection** (`messagedb-agent-14`)
   - Create `src/messagedb_agent/projections/llm_context.py`
   - Implement `project_to_llm_context(events) -> List[Message]` function
   - Convert UserMessageAdded → user message
@@ -157,7 +157,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - Added 13 comprehensive tests with 88% code coverage
   - Proper type annotations and cast usage for basedpyright compliance
 
-- [x] **Task 4.3: Implement Session State projection**
+- [x] **Task 4.3: Implement Session State projection** (`messagedb-agent-15`)
   - Create `src/messagedb_agent/projections/session_state.py`
   - Define SessionState dataclass: thread_id, status (active/completed/failed/terminated), message_count, tool_call_count, llm_call_count, error_count, last_activity_time, session_start_time, session_end_time
   - Implement `project_to_session_state(events) -> SessionState`
@@ -168,7 +168,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - Thread ID extraction from stream name
   - 33 comprehensive tests with 95% code coverage
 
-- [x] **Task 4.4: Implement Tool Arguments projection**
+- [x] **Task 4.4: Implement Tool Arguments projection** (`messagedb-agent-16`)
   - Create `src/messagedb_agent/projections/tool_args.py`
   - Implement `project_to_tool_arguments(events) -> list[dict[str, Any]]`
   - Extract tool call arguments from most recent LLMResponseReceived event
@@ -178,7 +178,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - Helper functions: get_tool_call_by_name(), get_all_tool_names(), has_pending_tool_calls(), count_tool_calls()
   - 28 comprehensive tests with 100% code coverage
 
-- [x] **Task 4.5: Implement Next Step projection**
+- [x] **Task 4.5: Implement Next Step projection** (`messagedb-agent-17`)
   - Create `src/messagedb_agent/projections/next_step.py`
   - Define StepType enum: LLM_CALL, TOOL_EXECUTION, TERMINATION
   - Implement `project_to_next_step(events) -> Tuple[StepType, Any]`
@@ -198,7 +198,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
 ## Phase 5: LLM Integration
 
 ### 5. Vertex AI Integration
-- [x] **Task 5.1: Setup Vertex AI client**
+- [x] **Task 5.1: Setup Vertex AI client** (`messagedb-agent-18`)
   - Create `src/messagedb_agent/llm/client.py`
   - Initialize Vertex AI using google.auth.default() for ADC
   - Configure from environment variables: GCP_PROJECT, GCP_LOCATION, MODEL_NAME (eg gemini-2.5-pro or claude-sonnet-4-5@20250929)
@@ -208,7 +208,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - Added comprehensive docstrings and type hints
   - All tests passing, linting clean
 
-- [x] **Task 5.2: Implement message formatting**
+- [x] **Task 5.2: Implement message formatting** (`messagedb-agent-19`)
   - Create `src/messagedb_agent/llm/format.py`
   - Implement function to convert projection messages to Vertex AI format
   - Handle system prompts
@@ -221,7 +221,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - Comprehensive validation and error handling
   - All tests passing, linting clean
 
-- [x] **Task 5.3: Implement LLM call function**
+- [x] **Task 5.3: Implement LLM call function** (`messagedb-agent-20`)
   - Create `src/messagedb_agent/llm/call.py`
   - Implement `call_llm(messages, tools, model_name) -> LLMResponse`
   - LLMResponse dataclass: text, tool_calls (List[ToolCall]), model_name, token_usage (dict)
@@ -237,7 +237,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - Fixed Gemini function calling to handle ValueError when accessing text on function call responses
   - All tests passing, linting clean
 
-- [x] **Task 5.3.1: Add Claude model support via AnthropicVertex SDK**
+- [x] **Task 5.3.1: Add Claude model support via AnthropicVertex SDK** (`messagedb-agent-21`)
   - Added `anthropic[vertex]>=0.42.0` dependency to pyproject.toml
   - Created unified `BaseLLMClient` abstract base class for both Gemini and Claude
   - Implemented `ClaudeClient` using `AnthropicVertex.messages.create()` API
@@ -252,7 +252,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - Code coverage: 80% for ClaudeClient, 78% for GeminiClient
   - All 169 unit tests + 9 integration tests passing
 
-- [x] **Task 5.4: Define system prompt**
+- [x] **Task 5.4: Define system prompt** (`messagedb-agent-22`)
   - Created `src/messagedb_agent/llm/prompts.py` with comprehensive prompt utilities
   - Defined `DEFAULT_SYSTEM_PROMPT` for event-sourced agent behavior
   - Defined `MINIMAL_SYSTEM_PROMPT` for simple use cases
@@ -267,7 +267,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
 ## Phase 6: Tool Framework
 
 ### 6. Tool Definition and Execution
-- [x] **Task 6.1: Create tool registration system**
+- [x] **Task 6.1: Create tool registration system** (`messagedb-agent-23`)
   - Created `src/messagedb_agent/tools/registry.py`
   - Defined Tool frozen dataclass: name, description, parameters_schema (dict), function (Callable)
   - Created ToolRegistry class with register/get/has/unregister/clear/list_names/list_tools methods
@@ -279,7 +279,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - 34 comprehensive tests with 98% code coverage
   - All tests passing, linting/formatting/type checking clean
 
-- [x] **Task 6.2: Implement tool execution**
+- [x] **Task 6.2: Implement tool execution** (`messagedb-agent-24`)
   - Created `src/messagedb_agent/tools/executor.py`
   - Created ToolExecutionResult dataclass with success, result, error, execution_time_ms, tool_name
   - Implemented execute_tool(tool_name, arguments, registry) -> ToolExecutionResult
@@ -293,7 +293,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - 37 comprehensive tests with 100% code coverage
   - All tests passing, linting/formatting/type checking clean
 
-- [x] **Task 6.3: Create example tools**
+- [x] **Task 6.3: Create example tools** (`messagedb-agent-25`)
   - Created `src/messagedb_agent/tools/builtin.py`
   - Implemented get_current_time() - returns current UTC time in ISO 8601 format
   - Implemented calculate() - safe math evaluator using AST (NO eval())
@@ -306,7 +306,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - 54 comprehensive tests with 95% code coverage
   - All tests passing, linting/formatting/type checking clean
 
-- [x] **Task 6.4: Convert tools to LLM function declarations**
+- [x] **Task 6.4: Convert tools to LLM function declarations** (`messagedb-agent-26`)
   - Created `src/messagedb_agent/tools/schema.py` with 7 utility functions
   - Implemented tool_to_function_declaration() - converts single Tool to ToolDeclaration
   - Implemented tools_to_function_declarations() - converts list of Tools
@@ -323,7 +323,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
 ## Phase 7: Processing Engine
 
 ### 7. Main Processing Loop
-- [x] **Task 7.1: Implement processing loop** (COMPLETE)
+- [x] **Task 7.1: Implement processing loop** (`messagedb-agent-27`)
   - Created `src/messagedb_agent/engine/loop.py` with main processing loop
   - Implemented `process_thread(thread_id, stream_name, store_client, llm_client, tool_registry, max_iterations=100)`
   - Main loop structure:
@@ -345,7 +345,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
     - 96% code coverage on loop.py (only untested path is max_iterations exception)
   - All 485 unit tests passing, linting/formatting/type checking clean
 
-- [x] **Task 7.2: Implement LLM step execution** (COMPLETE)
+- [x] **Task 7.2: Implement LLM step execution** (`messagedb-agent-28`)
   - Created `src/messagedb_agent/engine/steps/llm.py` with LLM step execution
   - Implemented `execute_llm_step(events, llm_client, tool_registry, stream_name, store_client, system_prompt, max_retries)`
   - Projects events to LLM context using `project_to_llm_context()`
@@ -365,7 +365,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
     - 96% code coverage on llm.py
   - All 496 unit tests passing, linting/formatting/type checking clean
 
-- [x] **Task 7.3: Implement Tool step execution** (COMPLETE)
+- [x] **Task 7.3: Implement Tool step execution** (`messagedb-agent-29`)
   - Created `src/messagedb_agent/engine/steps/tool.py` with `execute_tool_step()` function
   - Projects events to get tool calls using `project_to_tool_arguments()`
   - For each tool call:
@@ -381,7 +381,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
     - 100% code coverage on tool.py
   - All 508 unit tests passing, linting/formatting/type checking clean
 
-- [x] **Task 7.4: Implement session initialization** (COMPLETE)
+- [x] **Task 7.4: Implement session initialization** (`messagedb-agent-30`)
   - Created `src/messagedb_agent/engine/session.py` with `start_session()` function
   - Generates unique thread_id using `generate_thread_id()`
   - Builds stream_name using `build_stream_name(category, version, thread_id)`
@@ -397,7 +397,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
     - 100% code coverage on session.py
   - All 524 unit tests passing, 84% overall coverage
 
-- [x] **Task 7.5: Implement session termination** (COMPLETE)
+- [x] **Task 7.5: Implement session termination** (`messagedb-agent-31`)
   - Added `terminate_session(thread_id, reason, store_client, category, version)` to session.py
   - Writes SessionCompleted event with termination reason
   - Handles graceful shutdown by writing final event to stream
@@ -415,31 +415,31 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
 ## Phase 8: Observability
 
 ### 8. Logging and Tracing
-- [ ] **Task 8.1: Setup structured logging**
+- [ ] **Task 8.1: Setup structured logging** (`messagedb-agent-32`)
   - Create `src/messagedb_agent/observability/logging.py`
   - Configure structlog with JSON output
   - Add processors for: timestamp, log level, logger name, stack info
   - Create logger factory function
   - Add context binding helpers for thread_id, event_type
 
-- [ ] **Task 8.2: Setup OpenTelemetry**
+- [ ] **Task 8.2: Setup OpenTelemetry** (`messagedb-agent-33`)
   - Create `src/messagedb_agent/observability/tracing.py`
   - Initialize OpenTelemetry SDK
   - Configure tracer provider
   - Set up console exporter for basic impl (can swap to OTLP later)
   - Create tracer factory function
 
-- [ ] **Task 8.3: Add instrumentation to processing loop**
+- [ ] **Task 8.3: Add instrumentation to processing loop** (`messagedb-agent-34`)
   - Add span creation for: process_thread, execute_llm_step, execute_tool_step
   - Add span attributes: thread_id, event_count, step_type
   - Record exceptions in spans
 
-- [ ] **Task 8.4: Add instrumentation to LLM calls**
+- [ ] **Task 8.4: Add instrumentation to LLM calls** (`messagedb-agent-35`)
   - Wrap LLM calls in spans
   - Add attributes: model_name, token_count, latency
   - Record errors
 
-- [ ] **Task 8.5: Add instrumentation to tool executions**
+- [ ] **Task 8.5: Add instrumentation to tool executions** (`messagedb-agent-36`)
   - Wrap tool executions in spans
   - Add attributes: tool_name, execution_time_ms
   - Record errors
@@ -447,7 +447,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
 ## Phase 9: Configuration and CLI
 
 ### 9. Configuration Management
-- [ ] **Task 9.1: Create configuration module**
+- [ ] **Task 9.1: Create configuration module** (`messagedb-agent-37`)
   - Create `src/messagedb_agent/config.py`
   - Define Config dataclass with all configuration fields
   - Load from environment variables using python-dotenv
@@ -459,7 +459,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
     - Processing: max_iterations, enable_tracing
     - Logging: log_level, log_format
 
-- [x] **Task 9.2: Create CLI interface** (COMPLETE)
+- [x] **Task 9.2: Create CLI interface** (`messagedb-agent-38`)
   - Created `src/messagedb_agent/cli.py` with argparse
   - Implemented 4 commands:
     - `start <message>` - start new session with initial message
@@ -474,7 +474,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - 28 comprehensive tests with 100% passing
   - All 566 unit tests passing (85% coverage)
 
-- [ ] **Task 9.3: Create main entry point**
+- [ ] **Task 9.3: Create main entry point** (`messagedb-agent-39`)
   - Create `src/messagedb_agent/__main__.py`
   - Initialize configuration
   - Initialize logging and tracing
@@ -485,7 +485,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
 ## Phase 10: Testing
 
 ### 10. Test Infrastructure
-- [ ] **Task 10.1: Setup pytest infrastructure**
+- [ ] **Task 10.1: Setup pytest infrastructure** (`messagedb-agent-40`)
   - Create `tests/conftest.py`
   - Add pytest fixtures for:
     - Mock MessageDB client
@@ -494,7 +494,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
     - Test thread_id
     - Tool registry with test tools
 
-- [x] **Task 10.2: Setup Message DB test container** (Complete)
+- [x] **Task 10.2: Setup Message DB test container** (`messagedb-agent-41`)
   - Created `docker-compose.yml` using `ethangarofolo/message-db:1.3.1` image
   - Configured PostgreSQL with Message DB v1.3.0 extension installed
   - Added pytest-docker dependency and fixtures in `tests/conftest.py`:
@@ -534,34 +534,34 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - Container is automatically cleaned up after test session completes
   - Fresh database for each test run ensures test isolation
 
-- [ ] **Task 10.3: Write projection tests**
+- [ ] **Task 10.3: Write projection tests** (`messagedb-agent-42`)
   - Create `tests/test_projections.py`
   - Test each projection function with sample event sequences
   - Test edge cases: empty events, missing event types
   - Verify projection purity (same input → same output)
 
-- [ ] **Task 10.4: Write event store tests**
+- [ ] **Task 10.4: Write event store tests** (`messagedb-agent-43`)
   - Create `tests/test_store.py`
   - Test write_event function
   - Test read_stream function
   - Test optimistic concurrency control
   - Test against real Message DB container
 
-- [ ] **Task 10.5: Write tool framework tests**
+- [ ] **Task 10.5: Write tool framework tests** (`messagedb-agent-44`)
   - Create `tests/test_tools.py`
   - Test tool registration
   - Test tool execution
   - Test function declaration generation
   - Test error handling
 
-- [ ] **Task 10.6: Write integration tests**
+- [ ] **Task 10.6: Write integration tests** (`messagedb-agent-45`)
   - Create `tests/test_integration.py`
   - Test complete session lifecycle: start → LLM call → tool execution → completion
   - Test against real Message DB
   - Mock LLM API calls
   - Verify event sequence correctness
 
-- [ ] **Task 10.7: Write engine tests**
+- [ ] **Task 10.7: Write engine tests** (`messagedb-agent-46`)
   - Create `tests/test_engine.py`
   - Test step selection logic
   - Test loop termination conditions
@@ -571,20 +571,20 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
 ## Phase 11: Documentation and Examples
 
 ### 11. Documentation
-- [ ] **Task 11.1: Write README.md**
+- [ ] **Task 11.1: Write README.md** (`messagedb-agent-47`)
   - Project overview and architecture
   - Installation instructions using uv
   - Quick start guide
   - Configuration documentation
   - Link to spec.md and implementation-decisions.md
 
-- [ ] **Task 11.2: Write API documentation**
+- [ ] **Task 11.2: Write API documentation** (`messagedb-agent-48`)
   - Document all public functions and classes
   - Add docstrings following Google or NumPy style
   - Include type hints everywhere
   - Add usage examples in docstrings
 
-- [ ] **Task 11.3: Create example script**
+- [ ] **Task 11.3: Create example script** (`messagedb-agent-49`)
   - Create `examples/simple_agent.py`
   - Demonstrate basic usage:
     - Initialize system
@@ -593,13 +593,13 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
     - Display results
   - Add comments explaining each step
 
-- [ ] **Task 11.4: Create custom tool example**
+- [ ] **Task 11.4: Create custom tool example** (`messagedb-agent-50`)
   - Create `examples/custom_tool.py`
   - Show how to define and register custom tool
   - Show how to use projection customization (when implemented)
   - Demonstrate tool in agent session
 
-- [ ] **Task 11.5: Create troubleshooting guide**
+- [ ] **Task 11.5: Create troubleshooting guide** (`messagedb-agent-51`)
   - Common issues and solutions
   - How to inspect event streams
   - How to debug projection functions
@@ -608,24 +608,24 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
 ## Phase 12: Polish and Deployment Prep
 
 ### 12. Final Steps
-- [ ] **Task 12.1: Add .env.example file**
+- [ ] **Task 12.1: Add .env.example file** (`messagedb-agent-52`)
   - Document all environment variables
   - Provide example values
   - Add comments explaining each variable
 
-- [ ] **Task 12.2: Add .gitignore**
+- [ ] **Task 12.2: Add .gitignore** (`messagedb-agent-53`)
   - Ignore __pycache__, .pyc files
   - Ignore .env (but not .env.example)
   - Ignore IDE-specific files
   - Ignore test coverage reports
 
-- [ ] **Task 12.3: Add pre-commit hooks**
+- [ ] **Task 12.3: Add pre-commit hooks** (`messagedb-agent-54`)
   - Format code with black
   - Lint with ruff or flake8
   - Type check with mypy
   - Run tests before commit
 
-- [ ] **Task 12.4: Create development setup script**
+- [ ] **Task 12.4: Create development setup script** (`messagedb-agent-55`)
   - Create `scripts/setup_dev.sh`
   - Install uv if not present
   - Create virtual environment
@@ -633,13 +633,13 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - Setup Message DB container
   - Verify setup
 
-- [ ] **Task 12.5: Performance testing**
+- [ ] **Task 12.5: Performance testing** (`messagedb-agent-56`)
   - Create `tests/test_performance.py`
   - Benchmark projection performance with large event counts
   - Benchmark event write/read throughput
   - Document performance characteristics
 
-- [ ] **Task 12.6: Security audit**
+- [ ] **Task 12.6: Security audit** (`messagedb-agent-57`)
   - Review all external inputs for injection risks
   - Ensure secrets not logged
   - Verify SQL injection protection in Message DB client
@@ -653,7 +653,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
 
 **Documentation:** [Message DB Server Functions](https://docs.eventide-project.org/user-guide/message-db/server-functions.html)
 
-- [ ] **Task 13.1: Implement get_category_messages function**
+- [ ] **Task 13.1: Implement get_category_messages function** (`messagedb-agent-58`)
   - Create `src/messagedb_agent/store/category.py`
   - Implement `get_category_messages(category, position=0, batch_size=1000, correlation=None, consumer_group_member=None, consumer_group_size=None, condition=None)`
   - Returns List[Event] similar to read_stream
@@ -664,7 +664,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - Add comprehensive tests in `tests/store/test_category.py`
   - Export function from store module
 
-- [ ] **Task 13.2: Create generic subscriber framework**
+- [ ] **Task 13.2: Create generic subscriber framework** (`messagedb-agent-59`)
   - Create `src/messagedb_agent/subscriber/base.py`
   - Define `MessageHandler` protocol/type: `Callable[[Event], None]` or `Callable[[Event], Awaitable[None]]`
   - Define `Subscriber` class with:
@@ -684,7 +684,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - Add comprehensive tests in `tests/subscriber/test_base.py`
   - Export Subscriber and MessageHandler from subscriber module
 
-- [ ] **Task 13.3: Add position persistence for subscribers**
+- [ ] **Task 13.3: Add position persistence for subscribers** (`messagedb-agent-60`)
   - Create `src/messagedb_agent/subscriber/position.py`
   - Define `PositionStore` abstract base class with:
     - `get_position(subscriber_id) -> int`
@@ -700,7 +700,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - Add tests for both position store implementations
   - Export position store classes from subscriber module
 
-- [ ] **Task 13.4: Create event-specific subscriber helpers**
+- [ ] **Task 13.4: Create event-specific subscriber helpers** (`messagedb-agent-61`)
   - Create `src/messagedb_agent/subscriber/handlers.py`
   - Implement `print_event_handler(event)` - pretty-print events to console
   - Implement `filter_handler(predicate, handler)` - only call handler if predicate(event) is True
@@ -714,7 +714,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - Add tests in `tests/subscriber/test_handlers.py`
   - Export all handlers from subscriber module
 
-- [ ] **Task 13.5: Add CLI subscriber command**
+- [ ] **Task 13.5: Add CLI subscriber command** (`messagedb-agent-62`)
   - Update `src/messagedb_agent/cli.py`
   - Add new command: `subscribe <category> [--thread-id THREAD_ID]`
   - Options:
@@ -732,7 +732,7 @@ This document tracks the implementation tasks for the Event-Sourced Agent System
   - Update CLI tests to cover subscribe command
   - Update help text and CLI documentation
 
-- [ ] **Task 13.6: Add real-time monitoring to existing CLI commands**
+- [ ] **Task 13.6: Add real-time monitoring to existing CLI commands** (`messagedb-agent-63`)
   - Update `start` and `continue` commands to optionally use subscriber
   - Add `--follow` / `-f` flag to these commands
   - When --follow is enabled:

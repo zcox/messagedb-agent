@@ -48,7 +48,7 @@ htmlcov/
 .env.local
 
 # Claude Code
-.claude/
+#.claude/
 
 # Logs
 *.log
