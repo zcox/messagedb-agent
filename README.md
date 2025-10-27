@@ -22,6 +22,8 @@ Then I had CC implement each task by starting a new session and prompting someth
 read @spec.md and @tasks.md and complete Task 2.3
 ```
 
+Now trying out [beads](https://github.com/steveyegge/beads)...
+
 ### Best Practices
 
 - git commit everything from the beginning
