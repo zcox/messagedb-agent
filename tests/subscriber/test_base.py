@@ -256,7 +256,9 @@ def test_subscriber_error_handling(
     assert subscriber.position > 0
 
 
-def test_subscriber_position_tracking(messagedb_client: MessageDBClient, test_category: str) -> None:
+def test_subscriber_position_tracking(
+    messagedb_client: MessageDBClient, test_category: str
+) -> None:
     """Test that subscriber correctly tracks position across batches."""
     processed_count = 0
 
@@ -328,7 +330,9 @@ def test_subscriber_already_running_error(
         subscriber_thread.join(timeout=1.0)
 
 
-def test_subscriber_graceful_shutdown(messagedb_client: MessageDBClient, test_category: str) -> None:
+def test_subscriber_graceful_shutdown(
+    messagedb_client: MessageDBClient, test_category: str
+) -> None:
     """Test graceful shutdown of subscriber."""
 
     def handler(message: Message) -> None:

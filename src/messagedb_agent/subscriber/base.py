@@ -3,13 +3,16 @@
 import asyncio
 import time
 from collections.abc import Awaitable
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 import structlog
 
 from messagedb_agent.store import MessageDBClient
 from messagedb_agent.store.category import get_category_messages
 from messagedb_agent.store.operations import Message
+
+if TYPE_CHECKING:
+    from messagedb_agent.subscriber.position import PositionStore
 
 logger = structlog.get_logger(__name__)
 
@@ -67,6 +70,8 @@ class Subscriber:
         store_client: MessageDBClient,
         poll_interval_ms: int = 100,
         batch_size: int = 1000,
+        position_store: "PositionStore | None" = None,
+        subscriber_id: str | None = None,
     ):
         """Initialize the subscriber.
 
@@ -76,13 +81,34 @@ class Subscriber:
             store_client: Message DB client for reading events
             poll_interval_ms: Time to wait between polls in milliseconds
             batch_size: Maximum number of events to fetch per poll
+            position_store: Optional position store for persistence across restarts
+            subscriber_id: Unique ID for this subscriber (required if
+                position_store provided)
         """
         self.category = category
         self.handler = handler
         self.store_client = store_client
         self.poll_interval_ms = poll_interval_ms
         self.batch_size = batch_size
-        self.position = 0
+        self.position_store = position_store
+        self.subscriber_id = subscriber_id
+
+        # Validate that subscriber_id is provided if position_store is used
+        if position_store is not None and subscriber_id is None:
+            raise SubscriberError("subscriber_id must be provided when using a position_store")
+
+        # Load initial position from store if available
+        if position_store is not None and subscriber_id is not None:
+            self.position = position_store.get_position(subscriber_id)
+            logger.info(
+                "position_loaded_from_store",
+                category=category,
+                subscriber_id=subscriber_id,
+                position=self.position,
+            )
+        else:
+            self.position = 0
+
         self._should_stop = False
         self._is_running = False
 
@@ -95,6 +121,8 @@ class Subscriber:
             poll_interval_ms=poll_interval_ms,
             batch_size=batch_size,
             is_async=self._is_async_handler,
+            has_position_store=position_store is not None,
+            subscriber_id=subscriber_id,
         )
 
     def start(self) -> None:
@@ -182,6 +210,10 @@ class Subscriber:
                     max_global_position = max(m.global_position for m in messages)
                     self.position = max_global_position + 1
 
+                    # Save position if position store is configured
+                    if self.position_store is not None and self.subscriber_id is not None:
+                        self.position_store.update_position(self.subscriber_id, self.position)
+
                     logger.debug(
                         "subscriber_position_updated",
                         category=self.category,
@@ -251,6 +283,10 @@ class Subscriber:
                     # Update position to highest global_position + 1
                     max_global_position = max(m.global_position for m in messages)
                     self.position = max_global_position + 1
+
+                    # Save position if position store is configured
+                    if self.position_store is not None and self.subscriber_id is not None:
+                        self.position_store.update_position(self.subscriber_id, self.position)
 
                     logger.debug(
                         "subscriber_position_updated",
