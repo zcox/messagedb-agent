@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import sys
+import threading
 from datetime import datetime
 from typing import Any, cast
 from uuid import UUID
@@ -132,6 +133,150 @@ def _message_to_event(message: Message) -> BaseEvent:
     )
 
 
+def _process_with_follow(
+    thread_id: str,
+    stream_name: str,
+    store_client: MessageDBClient,
+    llm_client: Any,
+    tool_registry: ToolRegistry,
+    max_iterations: int,
+    category: str,
+    version: str,
+) -> int:
+    """Process a thread with real-time event following.
+
+    This function runs the processing loop in a background thread while
+    subscribing to the event stream to display events in real-time. It
+    stops when a SessionCompleted event is received or on error.
+
+    Args:
+        thread_id: Thread ID to process
+        stream_name: Full stream name
+        store_client: Message DB client
+        llm_client: LLM client for agent processing
+        tool_registry: Tool registry for agent
+        max_iterations: Maximum processing iterations
+        category: Stream category
+        version: Stream version
+
+    Returns:
+        Exit code (0 for success, non-zero for error)
+    """
+    import signal
+
+    # Track processing completion and errors
+    processing_complete = threading.Event()
+    processing_error: list[Exception] = []  # Use list to allow mutation in closure
+
+    # Processing function to run in background thread
+    def run_processing() -> None:
+        try:
+            process_thread(
+                thread_id=thread_id,
+                stream_name=stream_name,
+                store_client=store_client,
+                llm_client=llm_client,
+                tool_registry=tool_registry,
+                max_iterations=max_iterations,
+            )
+        except Exception as e:
+            processing_error.append(e)
+        finally:
+            processing_complete.set()
+
+    # Start processing in background thread
+    processing_thread = threading.Thread(target=run_processing, daemon=True)
+    processing_thread.start()
+
+    # Track if we should stop
+    should_stop = threading.Event()
+
+    # Create handler that stops on SessionCompleted
+    def follow_handler(message: Message) -> None:
+        # Only process events for our thread
+        if message.stream_name != stream_name:
+            return
+
+        # Print the event using ConversationPrinter
+        printer = ConversationPrinter(
+            show_tool_calls=True, show_tool_results=True, show_system=False
+        )
+        printer(message)
+
+        # Check if this is a SessionCompleted event
+        if message.type == "SessionCompleted":
+            should_stop.set()
+
+    # Get current max global position to start following from
+    conn = store_client.get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT COALESCE(MAX(global_position), -1) as max_position
+                FROM message_store.messages
+                WHERE category(stream_name) = %s
+                """,
+                (category,),
+            )
+            result = cast(dict[str, Any] | None, cur.fetchone())
+            max_position = result["max_position"] if result else -1
+            # Start from next position after the current max
+            position_store = InMemoryPositionStore()
+            if max_position >= 0:
+                position_store.update_position("cli-follow", max_position + 1)
+            else:
+                position_store.update_position("cli-follow", 0)
+    finally:
+        store_client.return_connection(conn)
+
+    # Create subscriber
+    subscriber = Subscriber(
+        category=category,
+        handler=follow_handler,
+        store_client=store_client,
+        position_store=position_store,
+        subscriber_id="cli-follow",
+        poll_interval_ms=100,
+        batch_size=100,
+    )
+
+    # Setup signal handler for graceful shutdown
+    def signal_handler(signum: int, frame: Any) -> None:
+        print("\nStopping...", file=sys.stderr)
+        should_stop.set()
+        subscriber.stop()
+
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
+    # Start subscriber in current thread (blocking)
+    print(f"Following session {thread_id}...", file=sys.stderr)
+    print("Press Ctrl+C to stop.\n", file=sys.stderr)
+
+    # Start subscriber in a separate thread so we can check for completion
+    subscriber_thread = threading.Thread(target=subscriber.start, daemon=True)
+    subscriber_thread.start()
+
+    # Wait for either SessionCompleted, processing error, or user interrupt
+    while not should_stop.is_set() and not processing_complete.is_set():
+        should_stop.wait(timeout=0.1)
+
+    # Stop subscriber
+    subscriber.stop()
+
+    # Check for processing errors
+    if processing_error:
+        print(f"\nError during processing: {processing_error[0]}", file=sys.stderr)
+        return 1
+
+    # Wait for processing thread to finish
+    processing_thread.join(timeout=5.0)
+
+    print("\nSession complete.", file=sys.stderr)
+    return 0
+
+
 def create_parser() -> argparse.ArgumentParser:
     """Create the argument parser for the CLI.
 
@@ -178,6 +323,12 @@ def create_parser() -> argparse.ArgumentParser:
         help="Override max iterations from config",
         metavar="N",
     )
+    start_parser.add_argument(
+        "--follow",
+        "-f",
+        action="store_true",
+        help="Follow session events in real-time (like 'tail -f')",
+    )
 
     # Continue command - continue existing session
     continue_parser = subparsers.add_parser("continue", help="Continue an existing agent session")
@@ -187,6 +338,12 @@ def create_parser() -> argparse.ArgumentParser:
         type=int,
         help="Override max iterations from config",
         metavar="N",
+    )
+    continue_parser.add_argument(
+        "--follow",
+        "-f",
+        action="store_true",
+        help="Follow session events in real-time (like 'tail -f')",
     )
 
     # Message command - add a user message to existing session
@@ -303,33 +460,49 @@ def cmd_start(args: argparse.Namespace, config: Config) -> int:
             max_iterations = (
                 args.max_iterations if args.max_iterations else config.processing.max_iterations
             )
-            print(f"Processing session (max {max_iterations} iterations)...")
 
-            final_state = process_thread(
-                thread_id=thread_id,
-                stream_name=stream_name,
-                store_client=store_client,
-                llm_client=llm_client,
-                tool_registry=tool_registry,
-                max_iterations=max_iterations,
-            )
+            # Check if follow mode is enabled
+            if hasattr(args, "follow") and args.follow:
+                # Use follow mode - run processing in background and stream events
+                return _process_with_follow(
+                    thread_id=thread_id,
+                    stream_name=stream_name,
+                    store_client=store_client,
+                    llm_client=llm_client,
+                    tool_registry=tool_registry,
+                    max_iterations=max_iterations,
+                    category=args.category,
+                    version=args.version,
+                )
+            else:
+                # Normal mode - run processing and show summary
+                print(f"Processing session (max {max_iterations} iterations)...")
 
-            # Display results
-            print("\n" + "=" * 80)
-            print("SESSION COMPLETE")
-            print("=" * 80)
-            print(f"Thread ID: {thread_id}")
-            print(f"Status: {final_state.status.value}")
-            print(f"Messages: {final_state.message_count}")
-            print(f"LLM Calls: {final_state.llm_call_count}")
-            print(f"Tool Calls: {final_state.tool_call_count}")
-            print(f"Errors: {final_state.error_count}")
+                final_state = process_thread(
+                    thread_id=thread_id,
+                    stream_name=stream_name,
+                    store_client=store_client,
+                    llm_client=llm_client,
+                    tool_registry=tool_registry,
+                    max_iterations=max_iterations,
+                )
 
-            if final_state.session_start_time and final_state.session_end_time:
-                duration = (
-                    final_state.session_end_time - final_state.session_start_time
-                ).total_seconds()
-                print(f"Duration: {duration:.2f}s")
+                # Display results
+                print("\n" + "=" * 80)
+                print("SESSION COMPLETE")
+                print("=" * 80)
+                print(f"Thread ID: {thread_id}")
+                print(f"Status: {final_state.status.value}")
+                print(f"Messages: {final_state.message_count}")
+                print(f"LLM Calls: {final_state.llm_call_count}")
+                print(f"Tool Calls: {final_state.tool_call_count}")
+                print(f"Errors: {final_state.error_count}")
+
+                if final_state.session_start_time and final_state.session_end_time:
+                    duration = (
+                        final_state.session_end_time - final_state.session_start_time
+                    ).total_seconds()
+                    print(f"Duration: {duration:.2f}s")
 
         return 0
 
@@ -373,33 +546,49 @@ def cmd_continue(args: argparse.Namespace, config: Config) -> int:
             max_iterations = (
                 args.max_iterations if args.max_iterations else config.processing.max_iterations
             )
-            print(f"Processing session (max {max_iterations} iterations)...")
 
-            final_state = process_thread(
-                thread_id=args.thread_id,
-                stream_name=stream_name,
-                store_client=store_client,
-                llm_client=llm_client,
-                tool_registry=tool_registry,
-                max_iterations=max_iterations,
-            )
+            # Check if follow mode is enabled
+            if hasattr(args, "follow") and args.follow:
+                # Use follow mode - run processing in background and stream events
+                return _process_with_follow(
+                    thread_id=args.thread_id,
+                    stream_name=stream_name,
+                    store_client=store_client,
+                    llm_client=llm_client,
+                    tool_registry=tool_registry,
+                    max_iterations=max_iterations,
+                    category=args.category,
+                    version=args.version,
+                )
+            else:
+                # Normal mode - run processing and show summary
+                print(f"Processing session (max {max_iterations} iterations)...")
 
-            # Display results
-            print("\n" + "=" * 80)
-            print("SESSION COMPLETE")
-            print("=" * 80)
-            print(f"Thread ID: {args.thread_id}")
-            print(f"Status: {final_state.status.value}")
-            print(f"Messages: {final_state.message_count}")
-            print(f"LLM Calls: {final_state.llm_call_count}")
-            print(f"Tool Calls: {final_state.tool_call_count}")
-            print(f"Errors: {final_state.error_count}")
+                final_state = process_thread(
+                    thread_id=args.thread_id,
+                    stream_name=stream_name,
+                    store_client=store_client,
+                    llm_client=llm_client,
+                    tool_registry=tool_registry,
+                    max_iterations=max_iterations,
+                )
 
-            if final_state.session_start_time and final_state.session_end_time:
-                duration = (
-                    final_state.session_end_time - final_state.session_start_time
-                ).total_seconds()
-                print(f"Duration: {duration:.2f}s")
+                # Display results
+                print("\n" + "=" * 80)
+                print("SESSION COMPLETE")
+                print("=" * 80)
+                print(f"Thread ID: {args.thread_id}")
+                print(f"Status: {final_state.status.value}")
+                print(f"Messages: {final_state.message_count}")
+                print(f"LLM Calls: {final_state.llm_call_count}")
+                print(f"Tool Calls: {final_state.tool_call_count}")
+                print(f"Errors: {final_state.error_count}")
+
+                if final_state.session_start_time and final_state.session_end_time:
+                    duration = (
+                        final_state.session_end_time - final_state.session_start_time
+                    ).total_seconds()
+                    print(f"Duration: {duration:.2f}s")
 
         return 0
 

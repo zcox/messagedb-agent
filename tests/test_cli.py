@@ -148,12 +148,44 @@ class TestParser:
         assert args.version == "v1"
         assert args.max_iterations == 50
 
+    def test_parse_start_with_follow(self):
+        """Test parsing start command with --follow flag."""
+        parser = create_parser()
+        args = parser.parse_args(["start", "Hello", "--follow"])
+        assert args.command == "start"
+        assert args.message == "Hello"
+        assert args.follow is True
+
+    def test_parse_start_with_follow_short(self):
+        """Test parsing start command with -f flag."""
+        parser = create_parser()
+        args = parser.parse_args(["start", "Hello", "-f"])
+        assert args.command == "start"
+        assert args.message == "Hello"
+        assert args.follow is True
+
     def test_parse_continue_command(self):
         """Test parsing continue command."""
         parser = create_parser()
         args = parser.parse_args(["continue", "thread-123"])
         assert args.command == "continue"
         assert args.thread_id == "thread-123"
+
+    def test_parse_continue_with_follow(self):
+        """Test parsing continue command with --follow flag."""
+        parser = create_parser()
+        args = parser.parse_args(["continue", "thread-123", "--follow"])
+        assert args.command == "continue"
+        assert args.thread_id == "thread-123"
+        assert args.follow is True
+
+    def test_parse_continue_with_follow_short(self):
+        """Test parsing continue command with -f flag."""
+        parser = create_parser()
+        args = parser.parse_args(["continue", "thread-123", "-f"])
+        assert args.command == "continue"
+        assert args.thread_id == "thread-123"
+        assert args.follow is True
 
     def test_parse_message_command(self):
         """Test parsing message command."""
@@ -327,6 +359,107 @@ class TestContinueCommand:
 
         # Verify
         assert result == 1
+
+
+class TestFollowMode:
+    """Tests for --follow mode functionality."""
+
+    @patch("messagedb_agent.cli.MessageDBClient")
+    @patch("messagedb_agent.cli.create_llm_client")
+    @patch("messagedb_agent.cli.start_session")
+    @patch("messagedb_agent.cli._process_with_follow")
+    def test_cmd_start_with_follow(
+        self,
+        mock_process_follow,
+        mock_start_session,
+        mock_create_llm,
+        mock_db_client,
+        test_config,
+    ):
+        """Test start command with --follow flag uses follow mode."""
+        # Setup mocks
+        mock_start_session.return_value = "thread-123"
+        mock_process_follow.return_value = 0
+
+        # Create args namespace with follow flag
+        parser = create_parser()
+        args = parser.parse_args(["start", "Hello", "--follow"])
+
+        # Execute command
+        result = cmd_start(args, test_config)
+
+        # Verify follow mode was used
+        assert result == 0
+        mock_start_session.assert_called_once()
+        mock_process_follow.assert_called_once()
+
+    @patch("messagedb_agent.cli.MessageDBClient")
+    @patch("messagedb_agent.cli.create_llm_client")
+    @patch("messagedb_agent.cli.read_stream")
+    @patch("messagedb_agent.cli._process_with_follow")
+    def test_cmd_continue_with_follow(
+        self,
+        mock_process_follow,
+        mock_read_stream,
+        mock_create_llm,
+        mock_db_client,
+        test_config,
+        sample_messages,
+    ):
+        """Test continue command with --follow flag uses follow mode."""
+        # Setup mocks
+        mock_read_stream.return_value = sample_messages
+        mock_process_follow.return_value = 0
+
+        # Create args namespace with follow flag
+        parser = create_parser()
+        args = parser.parse_args(["continue", "thread-123", "-f"])
+
+        # Execute command
+        result = cmd_continue(args, test_config)
+
+        # Verify follow mode was used
+        assert result == 0
+        mock_process_follow.assert_called_once()
+
+    @patch("messagedb_agent.cli.MessageDBClient")
+    @patch("messagedb_agent.cli.create_llm_client")
+    @patch("messagedb_agent.cli.start_session")
+    @patch("messagedb_agent.cli.process_thread")
+    def test_cmd_start_without_follow(
+        self,
+        mock_process,
+        mock_start_session,
+        mock_create_llm,
+        mock_db_client,
+        test_config,
+    ):
+        """Test start command without --follow flag uses normal mode."""
+        # Setup mocks
+        mock_start_session.return_value = "thread-123"
+        mock_final_state = SessionState(
+            thread_id="thread-123",
+            status=SessionStatus.COMPLETED,
+            message_count=2,
+            tool_call_count=0,
+            llm_call_count=1,
+            error_count=0,
+            last_activity_time=datetime.now(UTC),
+            session_start_time=datetime.now(UTC),
+            session_end_time=datetime.now(UTC),
+        )
+        mock_process.return_value = mock_final_state
+
+        # Create args namespace without follow flag
+        parser = create_parser()
+        args = parser.parse_args(["start", "Hello"])
+
+        # Execute command
+        result = cmd_start(args, test_config)
+
+        # Verify normal mode was used (not follow mode)
+        assert result == 0
+        mock_process.assert_called_once()
 
 
 class TestMessageCommand:
