@@ -7,11 +7,61 @@ session events, and listing recent sessions.
 
 import argparse
 import json
+import logging
+import os
 import sys
 from datetime import datetime
 from typing import Any, cast
 from uuid import UUID
 
+# Configure logging as early as possible, before any other imports that might use logging
+import structlog
+
+_log_level_str = os.getenv("LOG_LEVEL", "INFO").upper()
+_log_level = getattr(logging, _log_level_str, logging.INFO)
+
+# Configure standard library logging
+logging.basicConfig(format="%(message)s", stream=sys.stderr, level=_log_level, force=True)
+logging.root.setLevel(_log_level)
+logging.getLogger("psycopg").setLevel(_log_level)
+logging.getLogger("psycopg.pool").setLevel(_log_level)
+
+# Configure structlog with filtering by log level
+_log_format = os.getenv("LOG_FORMAT", "json").lower()
+if _log_format == "json":
+    _processors: list[structlog.types.Processor] = [
+        structlog.contextvars.merge_contextvars,
+        structlog.stdlib.filter_by_level,
+        structlog.stdlib.add_log_level,
+        structlog.stdlib.add_logger_name,
+        structlog.stdlib.PositionalArgumentsFormatter(),
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.processors.StackInfoRenderer(),
+        structlog.processors.format_exc_info,
+        structlog.processors.JSONRenderer(),
+    ]
+else:
+    _processors = [
+        structlog.contextvars.merge_contextvars,
+        structlog.stdlib.filter_by_level,
+        structlog.stdlib.add_log_level,
+        structlog.stdlib.add_logger_name,
+        structlog.stdlib.PositionalArgumentsFormatter(),
+        structlog.processors.TimeStamper(fmt="%Y-%m-%d %H:%M:%S"),
+        structlog.processors.StackInfoRenderer(),
+        structlog.processors.format_exc_info,
+        structlog.dev.ConsoleRenderer(),
+    ]
+
+structlog.configure(
+    processors=_processors,
+    wrapper_class=structlog.stdlib.BoundLogger,
+    context_class=dict,
+    logger_factory=structlog.stdlib.LoggerFactory(),
+    cache_logger_on_first_use=True,
+)
+
+# ruff: noqa: E402 - imports after logging configuration is intentional
 from messagedb_agent.config import Config, load_config
 from messagedb_agent.engine import add_user_message, process_thread, start_session
 from messagedb_agent.events import BaseEvent
@@ -32,6 +82,12 @@ from messagedb_agent.subscriber import (
     filter_handler,
 )
 from messagedb_agent.tools import ToolRegistry, register_builtin_tools
+
+# Re-apply logging configuration after all imports
+# (some libraries may have reset logger levels during import)
+logging.root.setLevel(_log_level)
+logging.getLogger("psycopg").setLevel(_log_level)
+logging.getLogger("psycopg.pool").setLevel(_log_level)
 
 
 def _convert_db_config(config: Config) -> MessageDBConfig:
@@ -795,6 +851,8 @@ def main(argv: list[str] | None = None) -> int:
     # Load configuration
     try:
         config = load_config(args.config)
+        # Note: Logging is configured at module import time (see top of file)
+        # to ensure it's set before any libraries create loggers
     except Exception as e:
         print(f"Configuration error: {e}", file=sys.stderr)
         return 1

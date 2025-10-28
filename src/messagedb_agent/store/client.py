@@ -4,6 +4,7 @@ This module provides a client for connecting to and interacting with Message DB,
 a PostgreSQL-based event store.
 """
 
+import logging
 import os
 from typing import Any, cast
 
@@ -130,6 +131,12 @@ class MessageDBClient:
         if self._pool is not None:
             self._logger.warning("Connection pool already exists, skipping connect")
             return
+
+        # Respect LOG_LEVEL environment variable for psycopg pool logger
+        # Set this BEFORE creating the pool to ensure it's respected during pool initialization
+        log_level_str = os.getenv("LOG_LEVEL", "INFO").upper()
+        log_level = getattr(logging, log_level_str, logging.INFO)
+        logging.getLogger("psycopg.pool").setLevel(log_level)
 
         conninfo = self.config.to_connection_string()
         self._logger.info(

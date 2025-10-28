@@ -5,9 +5,12 @@ variables. It provides type-safe configuration for Message DB connection,
 Vertex AI integration, and processing engine settings.
 """
 
+import logging
 import os
+import sys
 from dataclasses import dataclass
 
+import structlog
 from dotenv import load_dotenv
 
 
@@ -271,3 +274,70 @@ def _get_required_env(var_name: str) -> str:
             f"Please set it in your environment or .env file."
         )
     return value
+
+
+def configure_logging(logging_config: LoggingConfig) -> None:
+    """Configure structlog with the given logging configuration.
+
+    This function sets up structlog with appropriate processors, log level,
+    and output format based on the logging configuration.
+
+    Args:
+        logging_config: Logging configuration to apply
+
+    Example:
+        >>> config = load_config()
+        >>> configure_logging(config.logging)
+    """
+    # Map string log level to logging level constant
+    log_level = getattr(logging, logging_config.log_level.upper())
+
+    # Configure processors based on format
+    if logging_config.log_format == "json":
+        processors: list[structlog.types.Processor] = [
+            structlog.contextvars.merge_contextvars,
+            structlog.stdlib.filter_by_level,
+            structlog.stdlib.add_log_level,
+            structlog.stdlib.add_logger_name,
+            structlog.processors.TimeStamper(fmt="iso"),
+            structlog.processors.StackInfoRenderer(),
+            structlog.processors.format_exc_info,
+            structlog.processors.JSONRenderer(),
+        ]
+    else:
+        # Text format with colors for console output
+        processors = [
+            structlog.contextvars.merge_contextvars,
+            structlog.stdlib.filter_by_level,
+            structlog.stdlib.add_log_level,
+            structlog.stdlib.add_logger_name,
+            structlog.processors.TimeStamper(fmt="%Y-%m-%d %H:%M:%S"),
+            structlog.processors.StackInfoRenderer(),
+            structlog.processors.format_exc_info,
+            structlog.dev.ConsoleRenderer(),
+        ]
+
+    # Configure structlog
+    structlog.configure(
+        processors=processors,
+        wrapper_class=structlog.stdlib.BoundLogger,
+        context_class=dict,
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        cache_logger_on_first_use=True,
+    )
+
+    # Also configure standard library logging to respect the log level
+    # Use force=True to reconfigure if already configured
+    logging.basicConfig(
+        format="%(message)s",
+        stream=sys.stderr,
+        level=log_level,
+        force=True,
+    )
+
+    # Set log level for root logger
+    logging.root.setLevel(log_level)
+
+    # Set log level for third-party libraries
+    logging.getLogger("psycopg").setLevel(log_level)
+    logging.getLogger("psycopg.pool").setLevel(log_level)

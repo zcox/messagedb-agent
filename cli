@@ -1,3 +1,9 @@
 #!/usr/bin/env bash
 # MessageDB Agent CLI wrapper
+# Load environment from cli.env if it exists
+if [ -f "$(dirname "$0")/cli.env" ]; then
+    set -a
+    source "$(dirname "$0")/cli.env"
+    set +a
+fi
 uv run python -m messagedb_agent.cli "$@"
