@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# MessageDB Agent CLI wrapper
+uv run python -m messagedb_agent.cli "$@"
