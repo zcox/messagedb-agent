@@ -117,6 +117,7 @@ def messagedb_client(messagedb_config):
     The client is properly closed after the test completes.
     """
     client = MessageDBClient(messagedb_config)
+    client.connect()
     yield client
     # Cleanup: close the client if it's still open
     if client._pool is not None:
