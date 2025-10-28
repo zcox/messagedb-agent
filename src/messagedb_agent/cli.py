@@ -24,6 +24,13 @@ from messagedb_agent.store import (
     build_stream_name,
     read_stream,
 )
+from messagedb_agent.subscriber import (
+    ConversationPrinter,
+    InMemoryPositionStore,
+    Subscriber,
+    event_type_router,
+    filter_handler,
+)
 from messagedb_agent.tools import ToolRegistry, register_builtin_tools
 
 
@@ -168,6 +175,36 @@ def create_parser() -> argparse.ArgumentParser:
         choices=["text", "json"],
         default="text",
         help="Output format (default: text)",
+    )
+
+    # Subscribe command - subscribe to event stream in real-time
+    subscribe_parser = subparsers.add_parser(
+        "subscribe", help="Subscribe to event stream and display events in real-time"
+    )
+    subscribe_parser.add_argument("category", type=str, help="Category to subscribe to")
+    subscribe_parser.add_argument(
+        "--thread-id",
+        type=str,
+        help="Subscribe to specific thread only (filters by stream name)",
+        metavar="ID",
+    )
+    subscribe_parser.add_argument(
+        "--from-start",
+        action="store_true",
+        help="Start from position 0 (default: start from end)",
+    )
+    subscribe_parser.add_argument(
+        "--event-types",
+        type=str,
+        help="Comma-separated list of event types to show (e.g., UserMessage,LLMResponse)",
+        metavar="TYPES",
+    )
+    subscribe_parser.add_argument(
+        "--format",
+        type=str,
+        choices=["text", "json", "pretty"],
+        default="pretty",
+        help="Output format (default: pretty)",
     )
 
     return parser
@@ -603,6 +640,141 @@ def cmd_list(args: argparse.Namespace, config: Config) -> int:
         return 1
 
 
+def cmd_subscribe(args: argparse.Namespace, config: Config) -> int:
+    """Handle the 'subscribe' command - subscribe to event stream in real-time.
+
+    Args:
+        args: Parsed command-line arguments
+        config: System configuration
+
+    Returns:
+        Exit code (0 for success, non-zero for error)
+    """
+    try:
+        import signal
+
+        # Use store_client as context manager
+        with MessageDBClient(_convert_db_config(config)) as store_client:
+            # Determine starting position
+            if args.from_start:
+                # Use InMemoryPositionStore starting at 0
+                position_store = InMemoryPositionStore()
+            else:
+                # Use InMemoryPositionStore starting from current end (get latest position)
+                # We need to get the current max global_position for this category
+                conn = store_client.get_connection()
+                try:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            """
+                            SELECT COALESCE(MAX(global_position), -1) as max_position
+                            FROM message_store.messages
+                            WHERE category(stream_name) = %s
+                            """,
+                            (args.category,),
+                        )
+                        result = cast(dict[str, Any] | None, cur.fetchone())
+                        max_position = result["max_position"] if result else -1
+                        # Start from next position after the current max
+                        position_store = InMemoryPositionStore()
+                        if max_position >= 0:
+                            position_store.update_position("cli-subscriber", max_position + 1)
+                finally:
+                    store_client.return_connection(conn)
+
+            # Create base handler based on format
+            if args.format == "json":
+                # JSON format - print each event as JSON
+                def json_handler(message: Message) -> None:
+                    event_dict = {
+                        "id": str(message.id),
+                        "type": message.type,
+                        "stream_name": message.stream_name,
+                        "position": message.position,
+                        "global_position": message.global_position,
+                        "time": message.time.isoformat(),
+                        "data": message.data,
+                        "metadata": message.metadata,
+                    }
+                    print(json.dumps(event_dict))
+
+                base_handler = json_handler
+            elif args.format == "pretty":
+                # Pretty format - use ConversationPrinter
+                printer = ConversationPrinter(
+                    show_tool_calls=True, show_tool_results=True, show_system=True
+                )
+                base_handler = printer
+            else:
+                # Text format - simple event display
+                def text_handler(message: Message) -> None:
+                    print(f"[{message.global_position}] {message.type}")
+                    print(f"  Stream: {message.stream_name}")
+                    print(f"  Time: {message.time.isoformat()}")
+                    if message.data:
+                        print(f"  Data: {message.data}")
+                    print()
+
+                base_handler = text_handler
+
+            # Apply thread-id filter if specified
+            if args.thread_id:
+                # Build expected stream name pattern
+                stream_name_pattern = f"{args.category}:{args.version}-{args.thread_id}"
+
+                def thread_filter(message: Message) -> bool:
+                    return message.stream_name == stream_name_pattern
+
+                base_handler = filter_handler(thread_filter, base_handler)
+
+            # Apply event-types filter if specified
+            if args.event_types:
+                event_types = [et.strip() for et in args.event_types.split(",")]
+                handlers_map = dict.fromkeys(event_types, base_handler)
+                # event_type_router only calls handler if event type matches
+                # For non-matching types, it does nothing (which is what we want)
+                base_handler = event_type_router(handlers_map)
+
+            # Create subscriber
+            subscriber = Subscriber(
+                category=args.category,
+                handler=base_handler,
+                store_client=store_client,
+                position_store=position_store,
+                subscriber_id="cli-subscriber",
+                poll_interval_ms=100,
+                batch_size=100,
+            )
+
+            # Setup signal handler for graceful shutdown
+            def signal_handler(signum: int, frame: Any) -> None:
+                print("\nStopping subscriber...", file=sys.stderr)
+                subscriber.stop()
+
+            signal.signal(signal.SIGINT, signal_handler)
+            signal.signal(signal.SIGTERM, signal_handler)
+
+            # Start subscriber
+            print(
+                f"Subscribing to category '{args.category}' "
+                f"({'from start' if args.from_start else 'from end'})...",
+                file=sys.stderr,
+            )
+            if args.thread_id:
+                print(f"Filtering to thread: {args.thread_id}", file=sys.stderr)
+            if args.event_types:
+                print(f"Filtering to event types: {args.event_types}", file=sys.stderr)
+            print("Press Ctrl+C to stop.\n", file=sys.stderr)
+
+            subscriber.start()
+
+        return 0
+
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+
 def main(argv: list[str] | None = None) -> int:
     """Main entry point for the CLI.
 
@@ -638,6 +810,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_show(args, config)
     elif args.command == "list":
         return cmd_list(args, config)
+    elif args.command == "subscribe":
+        return cmd_subscribe(args, config)
     else:
         parser.print_help()
         return 1
