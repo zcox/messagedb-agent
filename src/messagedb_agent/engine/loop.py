@@ -138,17 +138,46 @@ def process_thread(
 
     iteration = 0
     terminated_naturally = False
+    last_position = -1  # Track last position read (-1 means nothing read yet)
+    accumulated_events: list[BaseEvent] = []  # Accumulate all events for projections
 
     while iteration < max_iterations:
         iteration += 1
         log_iter = log.bind(iteration=iteration)
         log_iter.debug("Processing loop iteration")
 
-        # Step 1: Read all events from the stream
-        messages = read_stream(store_client, stream_name)
-        events = [_message_to_event(msg) for msg in messages]
+        # Step 1: Read events from the stream
+        # On first iteration, read all messages (position=0)
+        # On subsequent iterations, read only new messages (position > last_position)
+        if last_position == -1:
+            # First iteration: read from beginning
+            messages = read_stream(store_client, stream_name, position=0)
+            log_iter.debug("First iteration: reading all events from stream")
+        else:
+            # Subsequent iterations: read only new messages after last_position
+            messages = read_stream(store_client, stream_name, position=last_position + 1)
+            log_iter.debug(
+                "Subsequent iteration: reading new events",
+                last_position=last_position,
+                reading_from_position=last_position + 1,
+            )
 
-        log_iter.debug("Read events from stream", event_count=len(events))
+        # Convert messages to events and accumulate them
+        new_events = [_message_to_event(msg) for msg in messages]
+        accumulated_events.extend(new_events)
+
+        # Update last_position if we read any messages
+        if messages:
+            last_position = max(msg.position for msg in messages)
+            log_iter.debug(
+                "Read events from stream",
+                new_event_count=len(new_events),
+                total_event_count=len(accumulated_events),
+                last_position=last_position,
+            )
+
+        # Use accumulated_events for projections (they need full history)
+        events = accumulated_events
 
         # Handle empty stream case (shouldn't happen in normal flow)
         if not events:
