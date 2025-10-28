@@ -1,7 +1,5 @@
 """Integration tests for subscriber with position persistence."""
 
-import time
-
 import pytest
 
 from messagedb_agent.store import MessageDBClient
