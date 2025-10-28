@@ -13,8 +13,8 @@ from messagedb_agent.subscriber import (
 
 def test_subscriber_with_in_memory_position_store(messagedb_client: MessageDBClient):
     """Test that subscriber correctly uses in-memory position store."""
-    category = "test-subscriber-inmem"
-    stream_name = f"{category}:v0-abc123"
+    category = "testSubscriberInmem"
+    stream_name = f"{category}-abc123"
 
     # Write some test messages
     for i in range(5):
@@ -59,8 +59,8 @@ def test_subscriber_with_in_memory_position_store(messagedb_client: MessageDBCli
 
 def test_subscriber_with_messagedb_position_store(messagedb_client: MessageDBClient):
     """Test that subscriber correctly uses Message DB position store."""
-    category = "test-subscriber-msgdb"
-    stream_name = f"{category}:v0-xyz789"
+    category = "testSubscriberMsgdb"
+    stream_name = f"{category}-xyz789"
 
     # Write some test messages
     for i in range(5):
@@ -105,8 +105,8 @@ def test_subscriber_with_messagedb_position_store(messagedb_client: MessageDBCli
 
 def test_subscriber_resumes_from_saved_position(messagedb_client: MessageDBClient):
     """Test that subscriber resumes from saved position after restart."""
-    category = "test-subscriber-resume"
-    stream_name = f"{category}:v0-resume1"
+    category = "testSubscriberResume"
+    stream_name = f"{category}-resume1"
 
     # Write initial batch of messages
     for i in range(3):
