@@ -5,6 +5,7 @@ them to resume from where they left off after restarts or failures.
 """
 
 from abc import ABC, abstractmethod
+from typing import Any, cast
 
 import structlog
 
@@ -202,3 +203,155 @@ class MessageDBPositionStore(PositionStore):
             store_type="messagedb",
             stream_name=stream_name,
         )
+
+
+class PostgresPositionStore(PositionStore):
+    """Position store that persists positions in a dedicated PostgreSQL table.
+
+    This store uses a dedicated PostgreSQL table (not Message DB streams) for
+    position storage, making it more efficient than MessageDBPositionStore for
+    high-throughput scenarios.
+
+    The table is automatically created on first use if it doesn't exist.
+
+    Trade-offs:
+        - PostgresPositionStore: Fastest, no audit trail, best for high-throughput
+        - MessageDBPositionStore: Slower, full audit trail, best for debugging/compliance
+        - InMemoryPositionStore: No persistence, best for testing
+
+    Example:
+        >>> config = MessageDBConfig(...)
+        >>> client = MessageDBClient(config)
+        >>> store = PostgresPositionStore(client)
+        >>> store.update_position("my-subscriber", 42)
+        >>> position = store.get_position("my-subscriber")
+        >>> print(position)
+        42
+    """
+
+    TABLE_NAME = "subscriber_positions"
+
+    def __init__(self, client: MessageDBClient):
+        """Initialize the PostgreSQL position store.
+
+        Args:
+            client: Message DB client for database connection
+        """
+        self.client = client
+        self._table_created = False
+        logger.debug("postgres_position_store_initialized")
+
+    def _ensure_table_exists(self) -> None:
+        """Create the subscriber_positions table if it doesn't exist.
+
+        The table schema:
+            - subscriber_id VARCHAR PRIMARY KEY
+            - position BIGINT NOT NULL
+            - updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+
+        This method is idempotent and can be called multiple times safely.
+        """
+        if self._table_created:
+            return
+
+        conn = self.client.get_connection()
+        try:
+            with conn.cursor() as cur:
+                # Create table with primary key index for fast lookups
+                cur.execute(
+                    f"""
+                    CREATE TABLE IF NOT EXISTS {self.TABLE_NAME} (
+                        subscriber_id VARCHAR PRIMARY KEY,
+                        position BIGINT NOT NULL,
+                        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+                    )
+                    """
+                )
+                conn.commit()
+                logger.debug(
+                    "subscriber_positions_table_ensured",
+                    table_name=self.TABLE_NAME,
+                )
+                self._table_created = True
+        finally:
+            self.client.return_connection(conn)
+
+    def get_position(self, subscriber_id: str) -> int:
+        """Get the current position for a subscriber.
+
+        Args:
+            subscriber_id: Unique identifier for the subscriber
+
+        Returns:
+            The current position, or 0 if no position stored
+        """
+        self._ensure_table_exists()
+
+        conn = self.client.get_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    SELECT position
+                    FROM {self.TABLE_NAME}
+                    WHERE subscriber_id = %s
+                    """,
+                    (subscriber_id,),
+                )
+                result = cast(dict[str, Any] | None, cur.fetchone())
+
+                if result is None:
+                    logger.debug(
+                        "position_retrieved",
+                        subscriber_id=subscriber_id,
+                        position=0,
+                        store_type="postgres",
+                    )
+                    return 0
+
+                position: int = result["position"]
+                logger.debug(
+                    "position_retrieved",
+                    subscriber_id=subscriber_id,
+                    position=position,
+                    store_type="postgres",
+                )
+                return position
+        finally:
+            self.client.return_connection(conn)
+
+    def update_position(self, subscriber_id: str, position: int) -> None:
+        """Update the position for a subscriber.
+
+        Uses INSERT ... ON CONFLICT UPDATE for efficient upserts (single query).
+
+        Args:
+            subscriber_id: Unique identifier for the subscriber
+            position: The new position to store
+        """
+        self._ensure_table_exists()
+
+        conn = self.client.get_connection()
+        try:
+            with conn.cursor() as cur:
+                # Use INSERT ... ON CONFLICT UPDATE for efficient upsert
+                cur.execute(
+                    f"""
+                    INSERT INTO {self.TABLE_NAME} (subscriber_id, position, updated_at)
+                    VALUES (%s, %s, NOW())
+                    ON CONFLICT (subscriber_id)
+                    DO UPDATE SET
+                        position = EXCLUDED.position,
+                        updated_at = NOW()
+                    """,
+                    (subscriber_id, position),
+                )
+                conn.commit()
+                logger.debug(
+                    "position_updated",
+                    subscriber_id=subscriber_id,
+                    position=position,
+                    store_type="postgres",
+                )
+        finally:
+            self.client.return_connection(conn)

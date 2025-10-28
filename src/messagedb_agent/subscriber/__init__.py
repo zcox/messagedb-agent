@@ -12,6 +12,7 @@ from messagedb_agent.subscriber.position import (
     InMemoryPositionStore,
     MessageDBPositionStore,
     PositionStore,
+    PostgresPositionStore,
 )
 
 __all__ = [
@@ -21,6 +22,7 @@ __all__ = [
     "PositionStore",
     "InMemoryPositionStore",
     "MessageDBPositionStore",
+    "PostgresPositionStore",
     "print_event_handler",
     "filter_handler",
     "event_type_router",
