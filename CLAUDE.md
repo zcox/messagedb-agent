@@ -22,6 +22,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 3. **Commit changes to git** when major work is complete:
    - Stage relevant files with `git add`
+   - Include the `.beads/issues.jsonl` file since it likely contains changes related to your work
    - Create a descriptive commit message following the existing style
    - Include the Claude Code footer in commit messages
    - Verify commit success with `git status`
@@ -261,30 +262,6 @@ response = client.call(messages, tools=[tool], system_prompt="You are helpful")
 - Multi-turn conversations
 - Token usage tracking
 
-### Current Implementation Status
-See `tasks.md` for detailed progress. Key completed tasks:
-- Phase 1: Project foundation (complete)
-- Phase 2: Event Store Integration (complete)
-  - Task 2.1: Message DB client with connection pooling
-  - Task 2.2: write_event function with OCC
-  - Task 2.3: read_stream function
-  - Task 2.4: Stream utilities (build_stream_name, thread_id generation)
-- Phase 5: LLM Integration (complete)
-  - Task 5.1: Vertex AI client setup
-  - Task 5.2: Message formatting
-  - Task 5.3: LLM call function (superseded by unified API)
-  - Task 5.3.1: Unified interface with Claude support (complete)
-- Task 10.2: Message DB test container with automatic Docker management (complete)
-
-**Progress: 12/78 tasks complete (15.4%)**
-
-Still to implement:
-- Phase 3: Event type definitions
-- Phase 4: Projection framework
-- Phase 6: Tool framework
-- Phase 7: Processing engine
-- Phase 8: Observability
-
 ## Testing Strategy
 
 - **Unit tests**: All pure functions (especially projections)
@@ -295,6 +272,6 @@ Still to implement:
 ## Documentation References
 
 - `spec.md`: Comprehensive system specification and architecture
-- `tasks.md`: Implementation task tracking with progress
+- The beads system contains all tasks
 - `basic-python.md`: Technology decisions and implementation approach
 - Message DB docs: https://docs.eventide-project.org/user-guide/message-db/
