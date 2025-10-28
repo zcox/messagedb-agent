@@ -56,15 +56,16 @@ def llm_response_message() -> Message:
         position=1,
         global_position=101,
         data={
-            "response": {
-                "text": "Let me check the weather for you.",
-                "tool_calls": [
-                    {
-                        "name": "get_weather",
-                        "arguments": {"city": "San Francisco"},
-                    }
-                ],
-            }
+            "response_text": "Let me check the weather for you.",
+            "tool_calls": [
+                {
+                    "id": "call_123",
+                    "name": "get_weather",
+                    "arguments": {"city": "San Francisco"},
+                }
+            ],
+            "model_name": "gemini-2.0-flash",
+            "token_usage": {},
         },
         metadata={},
         time=datetime.fromisoformat("2024-01-01T00:00:01"),
