@@ -351,3 +351,118 @@ def read_stream(
 
     finally:
         client.return_connection(conn)
+
+
+def get_last_stream_message(
+    client: MessageDBClient,
+    stream_name: str,
+) -> Message | None:
+    """Get the last message from a Message DB stream.
+
+    This function retrieves only the most recent message from the specified stream
+    using the Message DB get_last_stream_message stored procedure. This is more
+    efficient than reading the entire stream when you only need the latest message.
+
+    Args:
+        client: MessageDBClient instance (must be connected)
+        stream_name: Name of the stream to read from (e.g., "agent:v0-{threadId}")
+
+    Returns:
+        The last Message object in the stream, or None if the stream is empty.
+
+    Raises:
+        psycopg.Error: If database operation fails
+        RuntimeError: If client is not connected
+        json.JSONDecodeError: If message data or metadata cannot be deserialized
+
+    Example:
+        ```python
+        from messagedb_agent.store import MessageDBClient, MessageDBConfig
+        from messagedb_agent.store.operations import get_last_stream_message
+
+        config = MessageDBConfig()
+        with MessageDBClient(config) as client:
+            message = get_last_stream_message(
+                client=client,
+                stream_name="agent:v0-thread123"
+            )
+            if message:
+                print(f"Last message {message.type} at position {message.position}")
+            else:
+                print("Stream is empty")
+        ```
+    """
+    log = logger.bind(stream_name=stream_name)
+
+    log.info("Getting last message from stream")
+
+    conn = client.get_connection()
+    try:
+        with conn.cursor() as cur:
+            # Call the get_last_stream_message stored procedure
+            # Note: Message DB functions are in the message_store schema
+            cur.execute(
+                """
+                SELECT
+                    id,
+                    stream_name,
+                    type,
+                    position,
+                    global_position,
+                    data,
+                    metadata,
+                    time
+                FROM message_store.get_last_stream_message(%(stream_name)s)
+                """,
+                {"stream_name": stream_name},
+            )
+
+            row = cur.fetchone()
+            if row is None:
+                log.info("No messages found in stream")
+                return None
+
+            # Cast row to dict for type safety
+            message_row = cast(dict[str, Any], row)
+
+            # Deserialize data and metadata
+            # data is already a dict if it came from jsonb column
+            raw_data = message_row["data"]
+            if isinstance(raw_data, dict):
+                data: dict[str, Any] = cast(dict[str, Any], raw_data)
+            else:
+                data = cast(dict[str, Any], json.loads(raw_data))
+
+            # metadata might be None
+            metadata: dict[str, Any] | None = None
+            raw_metadata = message_row["metadata"]
+            if raw_metadata is not None:
+                if isinstance(raw_metadata, dict):
+                    metadata = cast(dict[str, Any], raw_metadata)
+                else:
+                    metadata = cast(dict[str, Any], json.loads(raw_metadata))
+
+            # Create Message object
+            message = Message(
+                id=message_row["id"],
+                stream_name=message_row["stream_name"],
+                type=message_row["type"],
+                position=int(message_row["position"]),
+                global_position=int(message_row["global_position"]),
+                data=data,
+                metadata=metadata,
+                time=message_row["time"],
+            )
+
+        # Commit the transaction to release locks
+        conn.commit()
+
+        log.info("Successfully retrieved last message from stream", message_type=message.type)
+        return message
+
+    except Exception as e:
+        log.error("Error while getting last message", error=str(e), error_type=type(e).__name__)
+        raise
+
+    finally:
+        client.return_connection(conn)

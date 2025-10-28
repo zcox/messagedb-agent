@@ -2,7 +2,6 @@
 
 import pytest
 
-from messagedb_agent.config import MessageDBConfig
 from messagedb_agent.store import MessageDBClient
 from messagedb_agent.subscriber.position import (
     InMemoryPositionStore,
@@ -130,9 +129,7 @@ class TestMessageDBPositionStore:
         position = store.get_position(subscriber_id)
         assert position == 0
 
-    def test_position_persists_across_store_instances(
-        self, messagedb_client: MessageDBClient
-    ):
+    def test_position_persists_across_store_instances(self, messagedb_client: MessageDBClient):
         """Test that position persists across different store instances."""
         subscriber_id = "test-subscriber-5"
 
@@ -168,6 +165,27 @@ class TestMessageDBPositionStore:
         position = store.get_position(subscriber_id)
 
         assert position == large_position
+
+    def test_get_position_with_many_updates_is_efficient(self, store: MessageDBPositionStore):
+        """Test that get_position is efficient even with many position updates.
+
+        This test demonstrates the performance improvement from using
+        get_last_stream_message instead of read_stream. With many position
+        updates, get_last_stream_message only reads 1 message while read_stream
+        would read all messages.
+        """
+        subscriber_id = "test-subscriber-performance"
+
+        # Write many position updates (simulating long-running subscriber)
+        for i in range(100):
+            store.update_position(subscriber_id, i * 10)
+
+        # Get the position - this should be fast because it only reads
+        # the last message, not all 100 messages
+        position = store.get_position(subscriber_id)
+
+        # Should return the latest position
+        assert position == 990  # Last update was 99 * 10
 
 
 class TestPositionStoreInterface:

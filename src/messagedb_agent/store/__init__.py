@@ -10,6 +10,7 @@ from messagedb_agent.store.client import MessageDBClient, MessageDBConfig
 from messagedb_agent.store.operations import (
     Message,
     OptimisticConcurrencyError,
+    get_last_stream_message,
     read_stream,
     write_message,
 )
@@ -24,6 +25,7 @@ __all__ = [
     "MessageDBConfig",
     "Message",
     "OptimisticConcurrencyError",
+    "get_last_stream_message",
     "read_stream",
     "write_message",
     "get_category_messages",

@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 import structlog
 
 from messagedb_agent.store import MessageDBClient
-from messagedb_agent.store.operations import read_stream, write_message
+from messagedb_agent.store.operations import get_last_stream_message, write_message
 
 logger = structlog.get_logger(__name__)
 
@@ -146,13 +146,13 @@ class MessageDBPositionStore(PositionStore):
         """
         stream_name = self._build_stream_name(subscriber_id)
 
-        # Read the stream to get all position events
-        messages = read_stream(
+        # Get the last position event (much more efficient than reading entire stream)
+        latest_message = get_last_stream_message(
             client=self.client,
             stream_name=stream_name,
         )
 
-        if not messages:
+        if latest_message is None:
             logger.debug(
                 "position_retrieved",
                 subscriber_id=subscriber_id,
@@ -161,9 +161,6 @@ class MessageDBPositionStore(PositionStore):
                 stream_name=stream_name,
             )
             return 0
-
-        # Get the latest event (last in the list)
-        latest_message = messages[-1]
 
         # Extract position from the event data
         position: int = latest_message.data.get("position", 0)
@@ -174,7 +171,6 @@ class MessageDBPositionStore(PositionStore):
             position=position,
             store_type="messagedb",
             stream_name=stream_name,
-            event_count=len(messages),
         )
 
         return position

@@ -12,6 +12,7 @@ import pytest
 from messagedb_agent.store import (
     MessageDBClient,
     OptimisticConcurrencyError,
+    get_last_stream_message,
     read_stream,
     write_message,
 )
@@ -475,3 +476,185 @@ class TestWriteReadIntegration:
             # Verify global_position is increasing
             for i in range(1, len(messages)):
                 assert messages[i].global_position > messages[i - 1].global_position
+
+
+class TestGetLastStreamMessage:
+    """Tests for get_last_stream_message function."""
+
+    def test_get_last_message_from_empty_stream(
+        self, messagedb_client: MessageDBClient, test_stream_name: str
+    ) -> None:
+        """Test getting last message from an empty stream returns None."""
+        with messagedb_client:
+            message = get_last_stream_message(
+                client=messagedb_client,
+                stream_name=test_stream_name,
+            )
+
+            assert message is None
+
+    def test_get_last_message_single_message(
+        self, messagedb_client: MessageDBClient, test_stream_name: str
+    ) -> None:
+        """Test getting last message when stream has one message."""
+        with messagedb_client:
+            # Write a message
+            message_data = {
+                "message": "Hello, world!",
+                "timestamp": "2025-10-19T10:00:00Z",
+            }
+            message_metadata = {"user_id": "user123"}
+
+            write_message(
+                client=messagedb_client,
+                stream_name=test_stream_name,
+                message_type="UserMessageAdded",
+                data=message_data,
+                metadata=message_metadata,
+            )
+
+            # Get the last message
+            message = get_last_stream_message(
+                client=messagedb_client,
+                stream_name=test_stream_name,
+            )
+
+            assert message is not None
+            assert message.stream_name == test_stream_name
+            assert message.type == "UserMessageAdded"
+            assert message.position == 0
+            assert message.data == message_data
+            assert message.metadata == message_metadata
+            assert isinstance(message.time, datetime)
+            assert isinstance(message.id, str)
+            assert isinstance(message.global_position, int)
+
+    def test_get_last_message_multiple_messages(
+        self, messagedb_client: MessageDBClient, test_stream_name: str
+    ) -> None:
+        """Test getting last message when stream has multiple messages."""
+        with messagedb_client:
+            # Write multiple messages
+            write_message(
+                client=messagedb_client,
+                stream_name=test_stream_name,
+                message_type="SessionStarted",
+                data={"thread_id": "thread123"},
+            )
+
+            write_message(
+                client=messagedb_client,
+                stream_name=test_stream_name,
+                message_type="UserMessageAdded",
+                data={"message": "First message"},
+            )
+
+            last_message_data = {"message": "Last message"}
+            write_message(
+                client=messagedb_client,
+                stream_name=test_stream_name,
+                message_type="UserMessageAdded",
+                data=last_message_data,
+            )
+
+            # Get the last message
+            message = get_last_stream_message(
+                client=messagedb_client,
+                stream_name=test_stream_name,
+            )
+
+            assert message is not None
+            assert message.type == "UserMessageAdded"
+            assert message.position == 2
+            assert message.data == last_message_data
+
+    def test_get_last_message_without_metadata(
+        self, messagedb_client: MessageDBClient, test_stream_name: str
+    ) -> None:
+        """Test getting last message that has no metadata."""
+        with messagedb_client:
+            # Write message without metadata
+            write_message(
+                client=messagedb_client,
+                stream_name=test_stream_name,
+                message_type="SessionStarted",
+                data={"thread_id": "thread123"},
+                metadata=None,
+            )
+
+            # Get the last message
+            message = get_last_stream_message(
+                client=messagedb_client,
+                stream_name=test_stream_name,
+            )
+
+            assert message is not None
+            assert message.metadata is None
+
+    def test_get_last_message_with_complex_data(
+        self, messagedb_client: MessageDBClient, test_stream_name: str
+    ) -> None:
+        """Test getting last message with complex nested data."""
+        with messagedb_client:
+            complex_data = {
+                "user_message": "What's the weather?",
+                "tool_calls": [
+                    {"id": "call1", "name": "get_weather", "args": {"location": "NYC"}},
+                    {
+                        "id": "call2",
+                        "name": "get_forecast",
+                        "args": {"location": "NYC", "days": 5},
+                    },
+                ],
+                "token_usage": {"prompt": 100, "completion": 50, "total": 150},
+            }
+
+            write_message(
+                client=messagedb_client,
+                stream_name=test_stream_name,
+                message_type="LLMResponseReceived",
+                data=complex_data,
+            )
+
+            # Get the last message
+            message = get_last_stream_message(
+                client=messagedb_client,
+                stream_name=test_stream_name,
+            )
+
+            assert message is not None
+            assert message.data == complex_data
+
+    def test_get_last_message_efficiency(
+        self, messagedb_client: MessageDBClient, test_stream_name: str
+    ) -> None:
+        """Test that get_last_stream_message is more efficient than read_stream."""
+        with messagedb_client:
+            # Write many messages
+            for i in range(100):
+                write_message(
+                    client=messagedb_client,
+                    stream_name=test_stream_name,
+                    message_type="UserMessageAdded",
+                    data={"message": f"Message {i}"},
+                )
+
+            # Get last message using get_last_stream_message
+            last_message = get_last_stream_message(
+                client=messagedb_client,
+                stream_name=test_stream_name,
+            )
+
+            # Also read entire stream for comparison
+            all_messages = read_stream(
+                client=messagedb_client,
+                stream_name=test_stream_name,
+            )
+
+            # They should return the same last message
+            assert last_message is not None
+            assert last_message.position == 99
+            assert last_message.data == {"message": "Message 99"}
+            assert last_message.position == all_messages[-1].position
+            assert last_message.data == all_messages[-1].data
+            assert last_message.type == all_messages[-1].type
