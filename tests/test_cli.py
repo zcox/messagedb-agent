@@ -523,9 +523,9 @@ class TestListCommand:
         mock_client_cm.__exit__ = Mock(return_value=False)
         mock_db_client.return_value = mock_client_cm
 
-        # Setup inner context manager (connection)
-        mock_store.__enter__ = Mock(return_value=mock_conn)
-        mock_store.__exit__ = Mock(return_value=False)
+        # Setup get_connection and return_connection methods
+        mock_store.get_connection = Mock(return_value=mock_conn)
+        mock_store.return_connection = Mock()
 
         # Setup cursor context manager
         mock_cursor_cm = Mock()
@@ -548,8 +548,8 @@ class TestListCommand:
         # Mock database query results
         now = datetime.now(UTC)
         fetchall_result = [
-            ("agent:v0-thread-123", now),
-            ("agent:v0-thread-456", now),
+            {"stream_name": "agent:v0-thread-123", "last_activity": now},
+            {"stream_name": "agent:v0-thread-456", "last_activity": now},
         ]
         self._setup_db_mock(mock_db_client, fetchall_result)
 
@@ -574,7 +574,7 @@ class TestListCommand:
         """Test list command with JSON format."""
         # Mock database query results
         now = datetime.now(UTC)
-        fetchall_result = [("agent:v0-thread-123", now)]
+        fetchall_result = [{"stream_name": "agent:v0-thread-123", "last_activity": now}]
         self._setup_db_mock(mock_db_client, fetchall_result)
 
         # Mock read_stream to return sample events

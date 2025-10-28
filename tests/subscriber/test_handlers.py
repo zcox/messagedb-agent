@@ -5,7 +5,6 @@ from datetime import datetime
 from uuid import UUID
 
 import pytest
-import structlog
 
 from messagedb_agent.store.operations import Message
 from messagedb_agent.subscriber.handlers import (
