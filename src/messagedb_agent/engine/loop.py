@@ -147,20 +147,14 @@ def process_thread(
         log_iter.debug("Processing loop iteration")
 
         # Step 1: Read events from the stream
-        # On first iteration, read all messages (position=0)
-        # On subsequent iterations, read only new messages (position > last_position)
-        if last_position == -1:
-            # First iteration: read from beginning
-            messages = read_stream(store_client, stream_name, position=0)
-            log_iter.debug("First iteration: reading all events from stream")
-        else:
-            # Subsequent iterations: read only new messages after last_position
-            messages = read_stream(store_client, stream_name, position=last_position + 1)
-            log_iter.debug(
-                "Subsequent iteration: reading new events",
-                last_position=last_position,
-                reading_from_position=last_position + 1,
-            )
+        # First iteration (last_position=-1): reads from position 0 (beginning)
+        # Subsequent iterations: read only new messages after last_position
+        messages = read_stream(store_client, stream_name, position=last_position + 1)
+        log_iter.debug(
+            "Reading events from stream",
+            last_position=last_position,
+            reading_from_position=last_position + 1,
+        )
 
         # Convert messages to events and accumulate them
         new_events = [_message_to_event(msg) for msg in messages]
