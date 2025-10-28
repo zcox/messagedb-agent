@@ -197,14 +197,14 @@ class ConversationPrinter:
 
         # LLM responses
         elif event_type == "LLMResponseReceived":
-            response_text = data.get("response", {}).get("text", "")
+            response_text = data.get("response_text", "")
             if response_text:
                 print("\n[Assistant]")
                 print(f"{response_text}")
 
             # Show tool calls if enabled
             if self.show_tool_calls:
-                tool_calls = data.get("response", {}).get("tool_calls", [])
+                tool_calls = data.get("tool_calls", [])
                 if tool_calls:
                     print("\n[Tool Calls]")
                     for tool_call in tool_calls:
