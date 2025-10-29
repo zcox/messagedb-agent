@@ -13,7 +13,7 @@ from messagedb_agent.llm import create_llm_client
 from messagedb_agent.llm.base import BaseLLMClient
 from messagedb_agent.store import Message, MessageDBClient, MessageDBConfig, read_stream
 from messagedb_agent.subscriber import InMemoryPositionStore, Subscriber
-from messagedb_agent.tools.registry import ToolRegistry
+from messagedb_agent.tools import ToolRegistry, register_builtin_tools
 from messagedb_agent.tui.widgets import MessageInput, MessageList
 
 
@@ -147,6 +147,7 @@ class AgentTUI(App[None]):
 
             # Initialize tool registry
             self.tool_registry = ToolRegistry()
+            register_builtin_tools(self.tool_registry)
 
             # If thread_id is provided, load existing session
             if self.thread_id:
