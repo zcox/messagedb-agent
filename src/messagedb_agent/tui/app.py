@@ -1,7 +1,6 @@
 """Main TUI application for interactive agent conversations."""
 
 import threading
-from typing import Any, cast
 
 from textual.app import App, ComposeResult
 from textual.containers import Container, Vertical
@@ -222,11 +221,12 @@ class AgentTUI(App[None]):
             self.log(f"Error handling message submission: {e}")
             self.notify(f"Error: {e}", severity="error", timeout=10)
 
-    def _start_subscriber(self, thread_id: str) -> None:
+    def _start_subscriber(self, thread_id: str, start_position: int = 0) -> None:
         """Start the subscriber for a specific thread.
 
         Args:
             thread_id: The thread ID to subscribe to
+            start_position: Global position to start reading from (default: 0)
         """
         if self.store_client is None:
             self.log("Cannot start subscriber: store_client not initialized")
@@ -238,27 +238,9 @@ class AgentTUI(App[None]):
         # Build stream name for filtering
         stream_name = f"{self.category}:{self.version}-{thread_id}"
 
-        # Get current max global position to start following from
-        conn = self.store_client.get_connection()
-        try:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    SELECT COALESCE(MAX(global_position), -1) as max_position
-                    FROM message_store.messages
-                    WHERE category(stream_name) = %s
-                    """,
-                    (self.category,),
-                )
-                result = cast(dict[str, Any] | None, cur.fetchone())
-                max_position: int = result["max_position"] if result else -1
-                position_store = InMemoryPositionStore()
-                if max_position >= 0:
-                    position_store.update_position("tui-subscriber", max_position + 1)
-                else:
-                    position_store.update_position("tui-subscriber", 0)
-        finally:
-            self.store_client.return_connection(conn)
+        # Initialize position store with the starting position
+        position_store = InMemoryPositionStore()
+        position_store.update_position("tui-subscriber", start_position)
 
         # Create handler that updates the message list
         def handle_event(message: Message) -> None:
@@ -379,8 +361,10 @@ class AgentTUI(App[None]):
 
             # Add all messages to the display
             message_list = self.query_one("#message-list", MessageList)
+            last_global_position = -1
             for message in messages:
                 message_list.add_message(message)
+                last_global_position = message.global_position
 
                 # Check if session is already completed
                 if message.type == "SessionCompleted":
@@ -392,9 +376,11 @@ class AgentTUI(App[None]):
                     message_input.disabled = True
 
             # If not completed, mark session as active and start subscriber
+            # Start from position after the last loaded event
             if not self.session_completed:
                 self.session_active = True
-                self._start_subscriber(thread_id)
+                next_position = last_global_position + 1 if last_global_position >= 0 else 0
+                self._start_subscriber(thread_id, start_position=next_position)
 
             self.log(f"Loaded existing session with {len(messages)} messages")
             self.notify(
