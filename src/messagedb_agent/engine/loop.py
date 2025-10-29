@@ -234,11 +234,20 @@ def process_thread(
             f"Processing exceeded maximum iterations ({max_iterations}) for thread {thread_id}"
         )
 
-    # Step 5: Project final session state
-    # Re-read events one final time to get the complete state
-    messages = read_stream(store_client, stream_name)
-    events = [_message_to_event(msg) for msg in messages]
-    final_state = project_to_session_state(events)
+    # Step 5: Read any remaining events since last read and project complete state
+    # This captures any events written during the final iteration (e.g., by execute_llm_step)
+    final_messages = read_stream(store_client, stream_name, position=last_position + 1)
+    if final_messages:
+        final_events = [_message_to_event(msg) for msg in final_messages]
+        accumulated_events.extend(final_events)
+        log.debug(
+            "Read final events after loop termination",
+            final_event_count=len(final_events),
+            total_event_count=len(accumulated_events),
+        )
+
+    # Project final state from accumulated events (avoids full stream re-read)
+    final_state = project_to_session_state(accumulated_events)
 
     log.info(
         "Thread processing complete",

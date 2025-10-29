@@ -472,7 +472,11 @@ class TestProcessThread:
             ),
         ]
 
-        with patch("messagedb_agent.engine.loop.read_stream", return_value=messages):
+        # Create position-aware mock: returns messages based on position parameter
+        def position_aware_read(client, stream, position=0):
+            return [msg for msg in messages if msg.position >= position]
+
+        with patch("messagedb_agent.engine.loop.read_stream", side_effect=position_aware_read):
             final_state = process_thread(
                 thread_id=thread_id,
                 stream_name=stream_name,
