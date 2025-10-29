@@ -4,6 +4,8 @@ from textual.app import App, ComposeResult
 from textual.containers import Container, Vertical
 from textual.widgets import Footer, Header, Static
 
+from messagedb_agent.tui.widgets import MessageInput
+
 
 class AgentTUI(App[None]):
     """Terminal UI application for interactive multi-message conversations with the agent.
@@ -20,9 +22,19 @@ class AgentTUI(App[None]):
         background: $surface;
     }
 
-    #content-container {
+    #main-container {
         height: 100%;
+    }
+
+    #content-container {
+        height: 1fr;
         background: $panel;
+        padding: 1;
+    }
+
+    #input-container {
+        height: auto;
+        background: $surface;
         padding: 1;
     }
 
@@ -46,13 +58,28 @@ class AgentTUI(App[None]):
             The widgets that make up the UI.
         """
         yield Header(show_clock=True)
-        yield Container(
-            Vertical(
+        yield Vertical(
+            Container(
                 Static("Agent TUI - Ready to start conversation", id="placeholder"),
                 id="content-container",
-            )
+            ),
+            Container(
+                MessageInput(id="message-input"),
+                id="input-container",
+            ),
+            id="main-container",
         )
         yield Footer()
+
+    def on_message_input_submitted(self, message: MessageInput.Submitted) -> None:
+        """Handle message input submission.
+
+        Args:
+            message: The submitted message event
+        """
+        # For now, just log the message
+        # This will be replaced with actual agent integration
+        self.log(f"User message submitted: {message.text}")
 
 
 def main() -> None:

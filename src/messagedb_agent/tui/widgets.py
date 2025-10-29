@@ -11,8 +11,10 @@ from rich.console import Group
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.text import Text
+from textual import on
 from textual.containers import VerticalScroll
-from textual.widgets import Static
+from textual.message import Message as TextualMessage
+from textual.widgets import Static, TextArea
 
 from messagedb_agent.store.operations import Message
 
@@ -406,3 +408,112 @@ class MessageList(VerticalScroll):
             The number of messages in the list
         """
         return self._message_count
+
+
+class MessageInput(TextArea):
+    """Multi-line text input widget for user messages.
+
+    This widget provides:
+    - Multi-line text input support
+    - Submit on Ctrl+Enter
+    - Auto-clear after submission
+    - Edge case handling (empty/whitespace-only messages)
+    - Optional typing indicator
+    """
+
+    DEFAULT_CSS = """
+    MessageInput {
+        height: auto;
+        max-height: 10;
+        border: solid $primary;
+        background: $surface;
+        padding: 0 1;
+    }
+
+    MessageInput:focus {
+        border: solid $accent;
+    }
+    """
+
+    class Submitted(TextualMessage):
+        """Message sent when user submits input (Ctrl+Enter)."""
+
+        def __init__(self, text: str) -> None:
+            """Initialize the submitted message.
+
+            Args:
+                text: The submitted text content
+            """
+            super().__init__()
+            self.text = text
+
+    def __init__(
+        self,
+        input_placeholder: str = "Type your message... (Ctrl+Enter to send)",
+        **kwargs: Any,
+    ) -> None:
+        """Initialize the message input widget.
+
+        Args:
+            input_placeholder: Placeholder text to show when empty
+            **kwargs: Additional arguments to pass to TextArea
+        """
+        # Initialize with language=None for plain text
+        super().__init__(
+            text="",
+            language=None,
+            theme="monokai",
+            show_line_numbers=False,
+            **kwargs,
+        )
+
+    @on(TextArea.Changed)
+    def _on_text_changed(self, event: TextArea.Changed) -> None:
+        """Handle text changes to update height dynamically.
+
+        Args:
+            event: The text changed event
+        """
+        # Textual's TextArea handles auto-sizing based on content
+        # We just need to ensure max-height constraint in CSS
+        pass
+
+    async def _on_key(self, event: Any) -> None:
+        """Handle key events for custom keybindings.
+
+        Args:
+            event: The key event
+        """
+        # Check for Ctrl+Enter
+        if event.key == "ctrl+j" or (
+            hasattr(event, "ctrl") and event.ctrl and event.key == "enter"
+        ):
+            self._submit_message()
+            event.prevent_default()
+            event.stop()
+        else:
+            # Delegate to parent for normal key handling
+            await super()._on_key(event)
+
+    def _submit_message(self) -> None:
+        """Submit the current message if valid."""
+        text = self.text.strip()
+
+        # Handle edge case: empty or whitespace-only messages
+        if not text:
+            # Don't submit empty messages, just clear the input
+            self.clear_input()
+            return
+
+        # Post the submitted message
+        self.post_message(self.Submitted(text))
+
+        # Clear the input after submission
+        self.clear_input()
+
+    def clear_input(self) -> None:
+        """Clear the input field."""
+        # Use the parent's clear method which returns EditResult
+        super().clear()
+        # Reset cursor to beginning
+        self.move_cursor((0, 0))
