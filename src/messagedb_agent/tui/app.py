@@ -8,8 +8,13 @@ from textual.containers import Container, Vertical
 from textual.widgets import Footer, Header
 
 from messagedb_agent.config import Config, load_config
-from messagedb_agent.store import Message, MessageDBClient, MessageDBConfig
+from messagedb_agent.engine.loop import process_thread
+from messagedb_agent.engine.session import add_user_message, start_session
+from messagedb_agent.llm import create_llm_client
+from messagedb_agent.llm.base import BaseLLMClient
+from messagedb_agent.store import Message, MessageDBClient, MessageDBConfig, read_stream
 from messagedb_agent.subscriber import InMemoryPositionStore, Subscriber
+from messagedb_agent.tools.registry import ToolRegistry
 from messagedb_agent.tui.widgets import MessageInput, MessageList
 
 
@@ -83,12 +88,19 @@ class AgentTUI(App[None]):
         self.version = version
         self.thread_id = thread_id
 
+        # Session state
+        self.session_active = False
+        self.session_completed = False
+
         # Will be initialized in on_mount
         self.config: Config | None = None
         self.store_client: MessageDBClient | None = None
+        self.llm_client: BaseLLMClient | None = None
+        self.tool_registry: ToolRegistry | None = None
         self.subscriber: Subscriber | None = None
         self.subscriber_thread: threading.Thread | None = None
         self.subscriber_stop_event = threading.Event()
+        self.processing_thread: threading.Thread | None = None
 
     def compose(self) -> ComposeResult:
         """Compose the UI layout.
@@ -131,9 +143,18 @@ class AgentTUI(App[None]):
             self.store_client = MessageDBClient(db_config)
             self.store_client.__enter__()
 
-            # If thread_id is provided, start subscriber immediately
+            # Initialize LLM client
+            self.llm_client = create_llm_client(self.config.vertex_ai)
+
+            # Initialize tool registry
+            self.tool_registry = ToolRegistry()
+
+            # If thread_id is provided, load existing session
             if self.thread_id:
-                self._start_subscriber(self.thread_id)
+                self._load_existing_session(self.thread_id)
+
+            # Update header with thread ID
+            self._update_header()
 
             self.log("TUI initialized successfully")
 
@@ -148,9 +169,58 @@ class AgentTUI(App[None]):
         Args:
             message: The submitted message event
         """
-        # For now, just log the message
-        # This will be replaced with actual agent integration
-        self.log(f"User message submitted: {message.text}")
+        # Check if session is completed
+        if self.session_completed:
+            self.notify(
+                "Session has been completed. Please restart the app for a new session.",
+                severity="warning",
+                timeout=5,
+            )
+            return
+
+        # Check if clients are initialized
+        if self.store_client is None or self.llm_client is None or self.tool_registry is None:
+            self.notify("Error: System not initialized", severity="error", timeout=5)
+            return
+
+        try:
+            # If no thread_id, start a new session
+            if self.thread_id is None:
+                self.log(f"Starting new session with message: {message.text}")
+                self.thread_id = start_session(
+                    initial_message=message.text,
+                    store_client=self.store_client,
+                    category=self.category,
+                    version=self.version,
+                )
+                self.session_active = True
+                self._update_header()
+                self.notify(f"Session started: {self.thread_id}", severity="information", timeout=3)
+
+                # Start subscriber for real-time updates
+                self._start_subscriber(self.thread_id)
+
+                # Start processing in background thread
+                self._start_processing()
+
+            else:
+                # Add message to existing session
+                self.log(f"Adding message to existing session: {message.text}")
+                add_user_message(
+                    thread_id=self.thread_id,
+                    message=message.text,
+                    store_client=self.store_client,
+                    category=self.category,
+                    version=self.version,
+                )
+
+                # If processing thread is not running, start it
+                if self.processing_thread is None or not self.processing_thread.is_alive():
+                    self._start_processing()
+
+        except Exception as e:
+            self.log(f"Error handling message submission: {e}")
+            self.notify(f"Error: {e}", severity="error", timeout=10)
 
     def _start_subscriber(self, thread_id: str) -> None:
         """Start the subscriber for a specific thread.
@@ -257,6 +327,17 @@ class AgentTUI(App[None]):
         message_list = self.query_one("#message-list", MessageList)
         message_list.add_message(message)
 
+        # Handle SessionCompleted event
+        if message.type == "SessionCompleted":
+            self.session_completed = True
+            self.session_active = False
+
+            # Disable the input widget
+            message_input = self.query_one("#message-input", MessageInput)
+            message_input.disabled = True
+
+            self.notify("Session completed", severity="information", timeout=5)
+
     def show_loading(self, message: str = "Loading...") -> None:
         """Show a loading indicator in the message list.
 
@@ -271,10 +352,122 @@ class AgentTUI(App[None]):
         # Currently a no-op since we're using notify for loading states
         pass
 
+    def _update_header(self) -> None:
+        """Update the header to display current thread ID."""
+        if self.thread_id:
+            # Update the app's sub_title to show thread ID
+            self.sub_title = f"Thread: {self.thread_id[:8]}..."
+        else:
+            self.sub_title = "No active session"
+
+    def _load_existing_session(self, thread_id: str) -> None:
+        """Load an existing session and display its conversation history.
+
+        Args:
+            thread_id: The thread ID to load
+        """
+        if self.store_client is None:
+            self.log("Cannot load session: store_client not initialized")
+            return
+
+        try:
+            # Build stream name
+            stream_name = f"{self.category}:{self.version}-{thread_id}"
+
+            # Read all events from the stream
+            messages = read_stream(self.store_client, stream_name)
+
+            # Add all messages to the display
+            message_list = self.query_one("#message-list", MessageList)
+            for message in messages:
+                message_list.add_message(message)
+
+                # Check if session is already completed
+                if message.type == "SessionCompleted":
+                    self.session_completed = True
+                    self.session_active = False
+
+                    # Disable the input widget
+                    message_input = self.query_one("#message-input", MessageInput)
+                    message_input.disabled = True
+
+            # If not completed, mark session as active and start subscriber
+            if not self.session_completed:
+                self.session_active = True
+                self._start_subscriber(thread_id)
+
+            self.log(f"Loaded existing session with {len(messages)} messages")
+            self.notify(
+                f"Loaded session: {len(messages)} messages",
+                severity="information",
+                timeout=3,
+            )
+
+        except Exception as e:
+            self.log(f"Error loading existing session: {e}")
+            self.notify(f"Error loading session: {e}", severity="error", timeout=10)
+
+    def _start_processing(self) -> None:
+        """Start the processing loop in a background thread."""
+        if self.thread_id is None:
+            self.log("Cannot start processing: no thread_id")
+            return
+
+        if self.store_client is None or self.llm_client is None or self.tool_registry is None:
+            self.log("Cannot start processing: clients not initialized")
+            return
+
+        # Build stream name
+        stream_name = f"{self.category}:{self.version}-{self.thread_id}"
+
+        # Define processing function to run in background
+        def run_processing() -> None:
+            if (
+                self.store_client is None
+                or self.llm_client is None
+                or self.tool_registry is None
+                or self.thread_id is None
+            ):
+                return
+
+            try:
+                self.log("Starting processing loop")
+                process_thread(
+                    thread_id=self.thread_id,
+                    stream_name=stream_name,
+                    store_client=self.store_client,
+                    llm_client=self.llm_client,
+                    tool_registry=self.tool_registry,
+                    max_iterations=100,
+                    auto_approve_tools=True,
+                )
+                self.log("Processing loop completed")
+            except Exception as e:
+                self.log(f"Processing error: {e}")
+                self.call_from_thread(
+                    self.notify,
+                    f"Processing error: {e}",
+                    severity="error",
+                    timeout=10,
+                )
+
+        # Start processing thread
+        self.processing_thread = threading.Thread(target=run_processing, daemon=True)
+        self.processing_thread.start()
+        self.log("Processing thread started")
+
     def on_unmount(self) -> None:
         """Clean up resources when the TUI is unmounted."""
         # Stop subscriber
         self._stop_subscriber()
+
+        # Wait for processing thread to finish (with timeout)
+        if self.processing_thread is not None:
+            self.log("Waiting for processing thread to finish...")
+            self.processing_thread.join(timeout=5.0)
+            if self.processing_thread.is_alive():
+                self.log("Processing thread did not finish in time")
+            self.processing_thread = None
 
         # Close store client
         if self.store_client is not None:
