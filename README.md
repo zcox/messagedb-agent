@@ -105,6 +105,25 @@ gcloud auth application-default login
 PGPASSWORD=message_store_password PGOPTIONS="--search_path=message_store" psql -h localhost -p 5433 -U postgres -d message_store
 ```
 
+## Usage
+
+The project provides two interfaces for interacting with the agent:
+
+1. **CLI** - Command-line interface for one-off messages and session management
+2. **TUI** - Terminal UI for interactive, multi-turn conversations
+
+Both interfaces have convenient wrapper scripts (`./cli` and `./tui`) that automatically load environment variables from `cli.env` if present.
+
+### Quick Start
+
+```bash
+# Start a new interactive TUI session
+./tui
+
+# Or use the CLI for a single message
+./cli start "What is the current time?"
+```
+
 ## CLI Usage
 
 The CLI provides commands for managing agent sessions:
@@ -114,6 +133,10 @@ The CLI provides commands for managing agent sessions:
 Start a new conversation with the agent:
 
 ```bash
+# Using the wrapper script (recommended - loads cli.env automatically)
+./cli start "What is the current time?"
+
+# Or using uv directly
 uv run python -m messagedb_agent.cli start "What is the current time?"
 ```
 
@@ -128,7 +151,7 @@ This will:
 Continue a conversation by adding a new message:
 
 ```bash
-uv run python -m messagedb_agent.cli message <thread-id> "Can you calculate 42 * 7?"
+./cli message <thread-id> "Can you calculate 42 * 7?"
 ```
 
 This enables multi-turn conversations while maintaining full conversation history.
@@ -138,7 +161,7 @@ This enables multi-turn conversations while maintaining full conversation histor
 Resume processing an existing session:
 
 ```bash
-uv run python -m messagedb_agent.cli continue <thread-id>
+./cli continue <thread-id>
 ```
 
 ### Show Session Events
@@ -147,13 +170,13 @@ Display all events for a session:
 
 ```bash
 # Text format (default)
-uv run python -m messagedb_agent.cli show <thread-id>
+./cli show <thread-id>
 
 # JSON format
-uv run python -m messagedb_agent.cli show <thread-id> --format json
+./cli show <thread-id> --format json
 
 # Show full event data including metadata
-uv run python -m messagedb_agent.cli show <thread-id> --full
+./cli show <thread-id> --full
 ```
 
 ### List Recent Sessions
@@ -162,13 +185,13 @@ List recent agent sessions:
 
 ```bash
 # List 10 most recent sessions (default)
-uv run python -m messagedb_agent.cli list
+./cli list
 
 # List 20 sessions
-uv run python -m messagedb_agent.cli list --limit 20
+./cli list --limit 20
 
 # JSON format
-uv run python -m messagedb_agent.cli list --format json
+./cli list --format json
 ```
 
 ### Global Options
@@ -190,17 +213,84 @@ All commands support these global options:
 
 ```bash
 # Start a conversation
-uv run python -m messagedb_agent.cli start "What is 5 + 3?"
+./cli start "What is 5 + 3?"
 # Output: Session started with thread ID: abc-123-def-456
 
 # Continue the conversation
-uv run python -m messagedb_agent.cli message abc-123-def-456 "Can you also tell me the time?"
+./cli message abc-123-def-456 "Can you also tell me the time?"
 
 # Add another message
-uv run python -m messagedb_agent.cli message abc-123-def-456 "Thanks for your help!"
+./cli message abc-123-def-456 "Thanks for your help!"
 
 # View the entire conversation
-uv run python -m messagedb_agent.cli show abc-123-def-456
+./cli show abc-123-def-456
+```
+
+## TUI Usage
+
+The Terminal UI (TUI) provides an interactive interface for multi-turn conversations with the agent.
+
+### Start a New Interactive Session
+
+Launch the TUI for a new conversation:
+
+```bash
+# Using the wrapper script (recommended - loads cli.env automatically)
+./tui
+
+# Or using uv directly
+uv run python -m messagedb_agent.tui
+```
+
+The TUI will:
+- Display a chat-like interface with message history
+- Show tool calls and LLM responses in real-time
+- Allow you to send multiple messages in the same session
+- Auto-scroll to show the latest messages
+- Handle session completion gracefully
+
+### Continue an Existing Session
+
+Resume an existing conversation in the TUI:
+
+```bash
+./tui --thread-id <thread-id>
+```
+
+### TUI Controls
+
+- **Type your message** and press `Enter` to send
+- **Ctrl+C** or **q** to quit
+- Messages are displayed in real-time as events arrive
+- Scroll through conversation history with arrow keys
+
+### TUI Features
+
+- **Real-time updates**: See agent responses and tool executions as they happen
+- **Persistent sessions**: Continue conversations across multiple TUI sessions
+- **Rich formatting**: Color-coded event types for easy reading
+- **Auto-scrolling**: Automatically scrolls to show new messages
+- **Session management**: Prevents input after session completion
+
+### Example TUI Workflow
+
+```bash
+# Start the TUI
+./tui
+
+# The interface appears, ready for your first message
+# Type: "What is the current time?"
+# Press Enter
+
+# The agent processes and responds in real-time
+# Type another message: "Can you calculate 15 * 23?"
+# Press Enter
+
+# Continue the conversation as long as needed
+# Press Ctrl+C or 'q' to exit
+
+# Later, resume the same conversation
+./tui --thread-id <thread-id>
 ```
 
 ## Project Status
