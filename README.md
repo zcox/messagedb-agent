@@ -293,22 +293,6 @@ Resume an existing conversation in the TUI:
 ./tui --thread-id <thread-id>
 ```
 
-## Project Status
-
-This project is currently in development. See [tasks.md](tasks.md) for implementation progress.
-
-**Completed Features:**
-- ✅ Event store integration (Message DB)
-- ✅ Event schema and types
-- ✅ Projection framework
-- ✅ LLM integration (Vertex AI with Gemini and Claude support)
-- ✅ Tool framework with builtin tools
-- ✅ Processing engine with main loop
-- ✅ CLI with multi-turn conversation support
-- ✅ Configuration management
-
-**Progress:** 33/78 tasks complete (42.3%)
-
 ## Documentation
 
 - [Specification](spec.md) - Detailed system specification
