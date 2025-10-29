@@ -238,6 +238,9 @@ class AgentTUI(App[None]):
         # Build stream name for filtering
         stream_name = f"{self.category}:{self.version}-{thread_id}"
 
+        # Build category (includes version, e.g., "agent:v0")
+        category = f"{self.category}:{self.version}"
+
         # Initialize position store with the starting position
         position_store = InMemoryPositionStore()
         position_store.update_position("tui-subscriber", start_position)
@@ -253,7 +256,7 @@ class AgentTUI(App[None]):
 
         # Create subscriber
         self.subscriber = Subscriber(
-            category=self.category,
+            category=category,
             handler=handle_event,
             store_client=self.store_client,
             position_store=position_store,
