@@ -76,6 +76,7 @@ def process_thread(
     llm_client: BaseLLMClient,
     tool_registry: ToolRegistry,
     max_iterations: int = 100,
+    auto_approve_tools: bool = False,
 ) -> SessionState:
     """Process an agent thread until completion or max iterations.
 
@@ -94,6 +95,8 @@ def process_thread(
         llm_client: LLM client for making LLM calls
         tool_registry: Registry of available tools for execution
         max_iterations: Maximum number of loop iterations (default: 100)
+        auto_approve_tools: Whether to automatically approve all tool executions
+            (default: False)
 
     Returns:
         Final SessionState after processing completes
@@ -122,7 +125,8 @@ def process_thread(
                 store_client=store_client,
                 llm_client=llm_client,
                 tool_registry=tool_registry,
-                max_iterations=50
+                max_iterations=50,
+                auto_approve_tools=True
             )
 
             print(f"Session completed with status: {final_state.status}")
@@ -132,6 +136,7 @@ def process_thread(
         thread_id=thread_id,
         stream_name=stream_name,
         max_iterations=max_iterations,
+        auto_approve_tools=auto_approve_tools,
     )
 
     log.info("Starting thread processing")
@@ -215,6 +220,7 @@ def process_thread(
                 tool_registry=tool_registry,
                 stream_name=stream_name,
                 store_client=store_client,
+                auto_approve_tools=auto_approve_tools,
             )
             if not success:
                 log_iter.warning("Some tools failed during execution")

@@ -118,7 +118,80 @@ class ToolExecutionFailedData(EventData):
             raise ValueError(f"Retry count must be >= 0, got {self.retry_count}")
 
 
+@dataclass(frozen=True)
+class ToolExecutionApprovedData(EventData):
+    """Data payload for ToolExecutionApproved event.
+
+    This event is recorded when a user approves execution of a tool that
+    requires permission. It captures the approval decision and allows the
+    processing loop to proceed with tool execution.
+
+    Attributes:
+        tool_name: Name of the tool that was approved
+        approved_by: Identifier for who approved the execution (e.g., "user", "auto")
+
+    Example:
+        >>> data = ToolExecutionApprovedData(
+        ...     tool_name="write_file",
+        ...     approved_by="user"
+        ... )
+    """
+
+    tool_name: str
+    approved_by: str
+
+    def __post_init__(self) -> None:
+        """Validate tool execution approved data after initialization.
+
+        Raises:
+            ValueError: If tool_name or approved_by is empty
+        """
+        if not self.tool_name or not self.tool_name.strip():
+            raise ValueError("Tool name cannot be empty")
+        if not self.approved_by or not self.approved_by.strip():
+            raise ValueError("Approved by cannot be empty")
+
+
+@dataclass(frozen=True)
+class ToolExecutionRejectedData(EventData):
+    """Data payload for ToolExecutionRejected event.
+
+    This event is recorded when a user rejects execution of a tool that
+    requires permission. The tool will not be executed and a failure event
+    will be written instead.
+
+    Attributes:
+        tool_name: Name of the tool that was rejected
+        rejected_by: Identifier for who rejected the execution (e.g., "user", "timeout")
+        reason: Optional reason for rejection
+
+    Example:
+        >>> data = ToolExecutionRejectedData(
+        ...     tool_name="write_file",
+        ...     rejected_by="user",
+        ...     reason="Unsafe operation"
+        ... )
+    """
+
+    tool_name: str
+    rejected_by: str
+    reason: str = "User rejected execution"
+
+    def __post_init__(self) -> None:
+        """Validate tool execution rejected data after initialization.
+
+        Raises:
+            ValueError: If tool_name or rejected_by is empty
+        """
+        if not self.tool_name or not self.tool_name.strip():
+            raise ValueError("Tool name cannot be empty")
+        if not self.rejected_by or not self.rejected_by.strip():
+            raise ValueError("Rejected by cannot be empty")
+
+
 # Event type constants for consistency
 TOOL_EXECUTION_REQUESTED = "ToolExecutionRequested"
+TOOL_EXECUTION_APPROVED = "ToolExecutionApproved"
+TOOL_EXECUTION_REJECTED = "ToolExecutionRejected"
 TOOL_EXECUTION_COMPLETED = "ToolExecutionCompleted"
 TOOL_EXECUTION_FAILED = "ToolExecutionFailed"

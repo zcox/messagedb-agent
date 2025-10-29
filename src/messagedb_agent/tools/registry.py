@@ -7,10 +7,29 @@ along with utilities for defining tools with automatic schema generation.
 import inspect
 from collections.abc import Callable
 from dataclasses import dataclass
+from enum import Enum
 from typing import Any, ParamSpec, TypeVar
 
 P = ParamSpec("P")
 R = TypeVar("R")
+
+
+class PermissionLevel(Enum):
+    """Permission level for tool execution.
+
+    Defines whether a tool requires user approval before execution.
+
+    Attributes:
+        SAFE: Tool can execute automatically without approval (e.g., get_current_time)
+        REQUIRES_APPROVAL: Tool requires user approval before execution
+            (e.g., file operations, network requests)
+        DANGEROUS: Tool is considered dangerous and should always require approval
+            (e.g., system commands, destructive operations)
+    """
+
+    SAFE = "safe"
+    REQUIRES_APPROVAL = "requires_approval"
+    DANGEROUS = "dangerous"
 
 
 class ToolError(Exception):
@@ -40,12 +59,15 @@ class Tool:
         description: Human-readable description of what the tool does
         parameters_schema: JSON schema defining the tool's parameters
         function: The callable that implements the tool's functionality
+        permission_level: Permission level determining if approval is required
+            (defaults to SAFE for backward compatibility)
     """
 
     name: str
     description: str
     parameters_schema: dict[str, Any]
     function: Callable[..., Any]
+    permission_level: PermissionLevel = PermissionLevel.SAFE
 
     def __post_init__(self) -> None:
         """Validate tool attributes."""
@@ -251,6 +273,7 @@ def tool(
     name: str | None = None,
     description: str | None = None,
     parameters_schema: dict[str, Any] | None = None,
+    permission_level: PermissionLevel = PermissionLevel.SAFE,
 ) -> Callable[[Callable[P, R]], Callable[P, R]]:
     """Decorator to register a function as a tool.
 
@@ -261,6 +284,7 @@ def tool(
         name: Tool name (defaults to function name)
         description: Tool description (defaults to function docstring)
         parameters_schema: Explicit parameter schema (auto-generated if not provided)
+        permission_level: Permission level (defaults to SAFE)
 
     Returns:
         Decorator function
@@ -303,6 +327,7 @@ def tool(
             description=tool_description,
             parameters_schema=tool_schema,
             function=func,
+            permission_level=permission_level,
         )
 
         return func
@@ -315,6 +340,7 @@ def register_tool(
     name: str | None = None,
     description: str | None = None,
     parameters_schema: dict[str, Any] | None = None,
+    permission_level: PermissionLevel = PermissionLevel.SAFE,
 ) -> Callable[[Callable[P, R]], Callable[P, R]]:
     """Create a decorator that registers tools to a specific registry.
 
@@ -326,6 +352,7 @@ def register_tool(
         name: Optional custom name for the tool
         description: Optional custom description for the tool
         parameters_schema: Optional custom parameter schema
+        permission_level: Permission level (defaults to SAFE)
 
     Returns:
         Decorator function that registers tools
@@ -341,7 +368,7 @@ def register_tool(
 
     def decorator(func: Callable[P, R]) -> Callable[P, R]:
         # Apply the tool decorator
-        decorated = tool(name, description, parameters_schema)(func)
+        decorated = tool(name, description, parameters_schema, permission_level)(func)
 
         # Register the tool
         tool_obj = decorated._tool_metadata  # type: ignore[attr-defined]

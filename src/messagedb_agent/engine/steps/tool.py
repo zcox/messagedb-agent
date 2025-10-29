@@ -4,7 +4,10 @@ This module implements the tool step, which:
 1. Projects events to extract tool calls from the last LLM response
 2. For each tool call:
    - Writes ToolExecutionRequested event
-   - Executes the tool
+   - Checks if tool requires approval based on permission level
+   - If approval required and not auto-approve mode:
+     - Writes approval/rejection event (based on config for now)
+   - Executes the tool if approved
    - Writes ToolExecutionCompleted or ToolExecutionFailed event
 3. Returns overall success status
 
@@ -15,14 +18,16 @@ import structlog
 
 from messagedb_agent.events.base import BaseEvent
 from messagedb_agent.events.tool import (
+    TOOL_EXECUTION_APPROVED,
     TOOL_EXECUTION_COMPLETED,
     TOOL_EXECUTION_FAILED,
+    TOOL_EXECUTION_REJECTED,
     TOOL_EXECUTION_REQUESTED,
 )
 from messagedb_agent.output import print_tool_result
 from messagedb_agent.projections import project_to_tool_arguments
 from messagedb_agent.store import MessageDBClient, write_message
-from messagedb_agent.tools import ToolRegistry, execute_tool
+from messagedb_agent.tools import PermissionLevel, ToolRegistry, execute_tool
 
 logger = structlog.get_logger(__name__)
 
@@ -38,6 +43,7 @@ def execute_tool_step(
     tool_registry: ToolRegistry,
     stream_name: str,
     store_client: MessageDBClient,
+    auto_approve_tools: bool = False,
 ) -> bool:
     """Execute a tool step in the processing loop.
 
@@ -45,7 +51,9 @@ def execute_tool_step(
     1. Projects events to extract tool calls from the last LLM response
     2. For each tool call:
        - Writes ToolExecutionRequested event
-       - Executes the tool using the registry
+       - Checks if tool requires approval based on permission level
+       - Handles approval (auto-approve or reject based on config)
+       - Executes the tool if approved using the registry
        - Writes ToolExecutionCompleted (success) or ToolExecutionFailed (failure) event
     3. Returns True if all tools executed successfully, False if any failed
 
@@ -54,6 +62,8 @@ def execute_tool_step(
         tool_registry: Registry of available tools
         stream_name: Stream name to write result events to
         store_client: MessageDB client for writing events
+        auto_approve_tools: Whether to automatically approve all tool executions
+            (default: False)
 
     Returns:
         True if all tool executions succeeded, False if any failed
@@ -76,7 +86,8 @@ def execute_tool_step(
             events=events,
             tool_registry=tool_registry,
             stream_name=stream_name,
-            store_client=store_client
+            store_client=store_client,
+            auto_approve_tools=True
         )
 
         if success:
@@ -88,6 +99,7 @@ def execute_tool_step(
     log = logger.bind(
         stream_name=stream_name,
         event_count=len(events),
+        auto_approve_tools=auto_approve_tools,
     )
 
     log.info("Executing tool step")
@@ -136,7 +148,105 @@ def execute_tool_step(
             log_tool.error("Failed to write ToolExecutionRequested event", error=str(e))
             raise ToolStepError(f"Failed to write requested event for {tool_name}: {e}") from e
 
-        # Step 2b: Execute the tool
+        # Step 2b: Check if tool requires approval (if tool exists)
+        # If tool doesn't exist, it will fail during execution anyway
+        requires_approval = False
+        if tool_registry.has(tool_name):
+            tool_obj = tool_registry.get(tool_name)
+            permission_level = tool_obj.permission_level
+            requires_approval = permission_level in (
+                PermissionLevel.REQUIRES_APPROVAL,
+                PermissionLevel.DANGEROUS,
+            )
+
+            log_tool.debug(
+                "Checking tool permission level",
+                permission_level=permission_level.value,
+                requires_approval=requires_approval,
+            )
+        else:
+            log_tool.warning("Tool not found in registry, will fail during execution")
+
+        # Step 2c: Handle approval
+        approved = True  # Default to approved for SAFE tools
+        if requires_approval:
+            if auto_approve_tools:
+                # Auto-approve mode: approve all tools
+                log_tool.info("Auto-approving tool execution (auto_approve_tools=True)")
+                try:
+                    write_message(
+                        client=store_client,
+                        stream_name=stream_name,
+                        message_type=TOOL_EXECUTION_APPROVED,
+                        data={
+                            "tool_name": tool_name,
+                            "approved_by": "auto",
+                        },
+                        metadata={"tool_id": tool_id, "tool_call_id": tool_id, "tool_index": i},
+                    )
+                except Exception as e:
+                    log_tool.error("Failed to write ToolExecutionApproved event", error=str(e))
+                    raise ToolStepError(
+                        f"Failed to write approved event for {tool_name}: {e}"
+                    ) from e
+            else:
+                # Manual approval required but not implemented yet
+                # For now, reject tools that require approval when auto_approve is False
+                log_tool.warning(
+                    "Tool requires approval but manual approval not implemented yet, rejecting"
+                )
+                approved = False
+                try:
+                    write_message(
+                        client=store_client,
+                        stream_name=stream_name,
+                        message_type=TOOL_EXECUTION_REJECTED,
+                        data={
+                            "tool_name": tool_name,
+                            "rejected_by": "system",
+                            "reason": "Manual approval not implemented yet",
+                        },
+                        metadata={"tool_id": tool_id, "tool_call_id": tool_id, "tool_index": i},
+                    )
+                except Exception as e:
+                    log_tool.error("Failed to write ToolExecutionRejected event", error=str(e))
+                    raise ToolStepError(
+                        f"Failed to write rejected event for {tool_name}: {e}"
+                    ) from e
+
+        # Step 2d: Execute tool if approved, otherwise write failure
+        if not approved:
+            # Tool was rejected, write failure event
+            all_successful = False
+            log_tool.warning("Tool execution rejected by permission system")
+
+            # Print rejection to user
+            print_tool_result(
+                tool_name=tool_name,
+                success=False,
+                error="Tool execution rejected: Manual approval not implemented yet",
+                execution_time_ms=0,
+            )
+
+            # Write ToolExecutionFailed event
+            try:
+                write_message(
+                    client=store_client,
+                    stream_name=stream_name,
+                    message_type=TOOL_EXECUTION_FAILED,
+                    data={
+                        "tool_name": tool_name,
+                        "error_message": "Tool execution rejected by permission system",
+                        "retry_count": 0,
+                    },
+                    metadata={"tool_id": tool_id, "tool_call_id": tool_id, "tool_index": i},
+                )
+            except Exception as e:
+                log_tool.error("Failed to write ToolExecutionFailed event", error=str(e))
+                raise ToolStepError(f"Failed to write failed event for {tool_name}: {e}") from e
+            continue  # Skip to next tool
+
+        # Tool is approved, execute it
         log_tool.debug("Executing tool", arguments=arguments)
         result = execute_tool(tool_name, arguments, tool_registry)
 

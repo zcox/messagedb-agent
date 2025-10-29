@@ -20,6 +20,7 @@ from messagedb_agent.tools.executor import (
     execute_tool_safe,
 )
 from messagedb_agent.tools.registry import (
+    PermissionLevel,
     Tool,
     ToolError,
     ToolNotFoundError,
@@ -41,6 +42,7 @@ from messagedb_agent.tools.schema import (
 
 __all__ = [
     # Registry
+    "PermissionLevel",
     "Tool",
     "ToolRegistry",
     "ToolError",

@@ -101,22 +101,37 @@ class ProcessingConfig:
     Attributes:
         max_iterations: Maximum number of processing loop iterations (default: 100)
         enable_tracing: Whether to enable OpenTelemetry tracing (default: False)
+        auto_approve_tools: Whether to automatically approve all tool executions
+            (default: False, requires user approval for restricted tools)
+        approval_timeout_seconds: Timeout for approval prompts in seconds (default: 300)
+            If timeout is reached, the tool execution is automatically rejected.
 
     Example:
-        >>> config = ProcessingConfig(max_iterations=100, enable_tracing=True)
+        >>> config = ProcessingConfig(
+        ...     max_iterations=100,
+        ...     enable_tracing=True,
+        ...     auto_approve_tools=False,
+        ...     approval_timeout_seconds=300
+        ... )
     """
 
     max_iterations: int
     enable_tracing: bool
+    auto_approve_tools: bool = False
+    approval_timeout_seconds: int = 300
 
     def __post_init__(self) -> None:
         """Validate processing configuration after initialization.
 
         Raises:
-            ValueError: If max_iterations is invalid
+            ValueError: If max_iterations or approval_timeout_seconds is invalid
         """
         if self.max_iterations <= 0:
             raise ValueError(f"max_iterations must be > 0, got {self.max_iterations}")
+        if self.approval_timeout_seconds <= 0:
+            raise ValueError(
+                f"approval_timeout_seconds must be > 0, got {self.approval_timeout_seconds}"
+            )
 
 
 @dataclass(frozen=True)
@@ -204,6 +219,8 @@ def load_config(env_file: str | None = None) -> Config:
         Processing:
             - MAX_ITERATIONS: Max processing loop iterations (default: 100)
             - ENABLE_TRACING: Enable OpenTelemetry tracing (default: false)
+            - AUTO_APPROVE_TOOLS: Auto-approve all tool executions (default: false)
+            - APPROVAL_TIMEOUT_SECONDS: Timeout for approval prompts (default: 300)
 
         Logging:
             - LOG_LEVEL: Logging level (default: INFO)
@@ -239,6 +256,8 @@ def load_config(env_file: str | None = None) -> Config:
     processing = ProcessingConfig(
         max_iterations=int(os.getenv("MAX_ITERATIONS", "100")),
         enable_tracing=os.getenv("ENABLE_TRACING", "false").lower() == "true",
+        auto_approve_tools=os.getenv("AUTO_APPROVE_TOOLS", "false").lower() == "true",
+        approval_timeout_seconds=int(os.getenv("APPROVAL_TIMEOUT_SECONDS", "300")),
     )
 
     # Logging configuration
