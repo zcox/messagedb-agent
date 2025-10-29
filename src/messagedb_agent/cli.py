@@ -420,6 +420,11 @@ def create_parser() -> argparse.ArgumentParser:
         help="Output format (default: pretty)",
     )
 
+    # TUI command - launch interactive terminal UI
+    subparsers.add_parser(
+        "tui", help="Launch interactive Terminal UI for multi-message conversations"
+    )
+
     return parser
 
 
@@ -885,6 +890,28 @@ def cmd_list(args: argparse.Namespace, config: Config) -> int:
         return 1
 
 
+def cmd_tui(args: argparse.Namespace, config: Config) -> int:
+    """Handle the 'tui' command - launch interactive Terminal UI.
+
+    Args:
+        args: Parsed command-line arguments
+        config: System configuration
+
+    Returns:
+        Exit code (0 for success, non-zero for error)
+    """
+    try:
+        from messagedb_agent.tui import AgentTUI
+
+        app = AgentTUI()
+        app.run()
+        return 0
+
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+
 def cmd_subscribe(args: argparse.Namespace, config: Config) -> int:
     """Handle the 'subscribe' command - subscribe to event stream in real-time.
 
@@ -1059,6 +1086,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_list(args, config)
     elif args.command == "subscribe":
         return cmd_subscribe(args, config)
+    elif args.command == "tui":
+        return cmd_tui(args, config)
     else:
         parser.print_help()
         return 1
