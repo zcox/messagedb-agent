@@ -33,6 +33,10 @@ Now trying out [beads](https://github.com/steveyegge/beads)...
 
 This project implements an event-sourced architecture for agent systems where all agent interactions, decisions, and actions are recorded as immutable events in persistent streams. The system enables durable, observable, and distributed execution of agent workflows through event-driven processing.
 
+## TUI Example
+
+![](img/tui.png)
+
 ## Features
 
 - **Durability**: Event storage persists beyond process lifetime with recovery from crashes
