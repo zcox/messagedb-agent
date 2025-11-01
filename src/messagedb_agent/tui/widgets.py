@@ -59,6 +59,11 @@ class MessageWidget(Static):
         data = self.message.data
         parts: list[Text | Panel | Group] = []
 
+        # Skip rendering entirely for ToolExecutionRequested
+        # (tool calls already shown in LLMResponseReceived)
+        if event_type == "ToolExecutionRequested":
+            return Group(*parts)
+
         # Add timestamp if enabled
         if self.show_timestamp:
             timestamp = self.message.time.strftime("%H:%M:%S")
@@ -70,9 +75,6 @@ class MessageWidget(Static):
             parts.append(self._render_user_message(data))
         elif event_type == "LLMResponseReceived":
             parts.append(self._render_llm_response(data))
-        elif event_type == "ToolExecutionRequested":
-            # Skip rendering - tool calls already shown in LLMResponseReceived
-            pass
         elif event_type == "ToolResultReceived":
             parts.append(self._render_tool_result(data))
         elif event_type == "SessionStarted":
