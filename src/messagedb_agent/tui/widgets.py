@@ -384,7 +384,7 @@ class MessageInput(TextArea):
 
     This widget provides:
     - Multi-line text input support
-    - Submit on Ctrl+Enter
+    - Submit on Enter (Shift+Enter for newline)
     - Auto-clear after submission
     - Edge case handling (empty/whitespace-only messages)
     - Optional typing indicator
@@ -418,7 +418,7 @@ class MessageInput(TextArea):
 
     def __init__(
         self,
-        input_placeholder: str = "Type your message... (Ctrl+Enter to send)",
+        input_placeholder: str = "Type your message... (Enter to send, Shift+Enter for newline)",
         **kwargs: Any,
     ) -> None:
         """Initialize the message input widget.
@@ -453,15 +453,14 @@ class MessageInput(TextArea):
         Args:
             event: The key event
         """
-        # Check for Ctrl+Enter
-        if event.key == "ctrl+j" or (
-            hasattr(event, "ctrl") and event.ctrl and event.key == "enter"
-        ):
+        # Check for plain Enter (without Shift)
+        if event.key == "enter" and not getattr(event, "shift", False):
             self._submit_message()
             event.prevent_default()
             event.stop()
+        # Shift+Enter should insert a newline (default behavior)
+        # Just delegate to parent for normal key handling
         else:
-            # Delegate to parent for normal key handling
             await super()._on_key(event)
 
     def _submit_message(self) -> None:
