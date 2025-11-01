@@ -448,8 +448,8 @@ class AgentTUI(App[None]):
                         timeout=5,
                     )
 
-        # Schedule the async function to run
-        self.call_later(show_approval_and_respond)
+        # Run the async function in a worker (required for push_screen_wait)
+        self.run_worker(show_approval_and_respond(), exclusive=False)
 
     def show_loading(self, message: str = "Loading...") -> None:
         """Show a loading indicator in the message list.
