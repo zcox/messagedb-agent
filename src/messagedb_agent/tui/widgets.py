@@ -453,18 +453,32 @@ class MessageInput(TextArea):
         Args:
             event: The key event
         """
+        # DEBUG: Log all key events to understand what we're receiving
+        import structlog
+
+        logger = structlog.get_logger()
+        logger.info(
+            "MessageInput key event",
+            key=event.key,
+            character=repr(event.character) if event.character else None,
+        )
+
         # Enter sends the message (standard chat behavior)
         if event.key == "enter":
+            logger.info("Enter detected - submitting message")
             self._submit_message()
             event.prevent_default()
             event.stop()
         # Alt+Enter inserts a newline for multi-line messages
-        elif event.key == "escape,enter":  # Alt+Enter often comes through as escape,enter
+        # Try various possible representations
+        elif event.key in ("escape,enter", "alt+enter", "option+enter"):
+            logger.info(f"Newline key detected: {event.key}")
             # Insert a newline at cursor position
             self.insert("\n")
             event.prevent_default()
             event.stop()
         else:
+            logger.info(f"Delegating key {event.key!r} to parent")
             await super()._on_key(event)
 
     def _submit_message(self) -> None:
