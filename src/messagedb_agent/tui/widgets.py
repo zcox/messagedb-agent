@@ -11,7 +11,7 @@ from rich.console import Group
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.text import Text
-from textual import on
+from textual import events, on
 from textual.containers import VerticalScroll
 from textual.message import Message as TextualMessage
 from textual.widgets import Static, TextArea
@@ -447,14 +447,15 @@ class MessageInput(TextArea):
         # We just need to ensure max-height constraint in CSS
         pass
 
-    async def _on_key(self, event: Any) -> None:
+    async def _on_key(self, event: events.Key) -> None:
         """Handle key events for custom keybindings.
 
         Args:
             event: The key event
         """
         # Check for plain Enter (without Shift)
-        if event.key == "enter" and not getattr(event, "shift", False):
+        # Shift+Enter will have key="shift+enter", so we only submit on "enter"
+        if event.key == "enter":
             self._submit_message()
             event.prevent_default()
             event.stop()
