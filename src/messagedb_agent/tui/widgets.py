@@ -384,7 +384,7 @@ class MessageInput(TextArea):
 
     This widget provides:
     - Multi-line text input support
-    - Submit on Ctrl+Enter (Enter for newline)
+    - Submit on Enter (Alt+Enter for newline)
     - Auto-clear after submission
     - Edge case handling (empty/whitespace-only messages)
     - Optional typing indicator
@@ -418,7 +418,7 @@ class MessageInput(TextArea):
 
     def __init__(
         self,
-        input_placeholder: str = "Type your message... (Ctrl+Enter to send)",
+        input_placeholder: str = "Type your message... (Enter to send, Alt+Enter for newline)",
         **kwargs: Any,
     ) -> None:
         """Initialize the message input widget.
@@ -453,16 +453,17 @@ class MessageInput(TextArea):
         Args:
             event: The key event
         """
-        # Try multiple possible representations of Ctrl+Enter
-        # Different terminals may send different codes:
-        # - ctrl+j (common in many terminals)
-        # - ctrl+m (Enter is sometimes Ctrl+M)
-        # - ctrl+enter (Textual's representation)
-        if event.key in ("ctrl+j", "ctrl+m", "ctrl+enter"):
+        # Enter sends the message (standard chat behavior)
+        if event.key == "enter":
             self._submit_message()
             event.prevent_default()
             event.stop()
-        # Plain Enter inserts newline (default TextArea behavior)
+        # Alt+Enter inserts a newline for multi-line messages
+        elif event.key == "escape,enter":  # Alt+Enter often comes through as escape,enter
+            # Insert a newline at cursor position
+            self.insert("\n")
+            event.prevent_default()
+            event.stop()
         else:
             await super()._on_key(event)
 
