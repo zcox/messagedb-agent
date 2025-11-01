@@ -35,11 +35,18 @@ This project implements an event-sourced architecture for agent systems where al
 
 ## TUI Example
 
+```
+docker compose up -d
+./tui
+```
+
 ![](img/tui.png)
 
 Events in Message DB:
 
 ```
+PGPASSWORD=message_store_password PGOPTIONS="--search_path=message_store" psql -h localhost -p 5433 -U postgres -d message_store
+
 message_store=# select position,time,type,data,metadata from messages where stream_name='agent:v0-c9fcdc1c-a3a3-46e0-be9f-72707ea59d2c' order by global_position asc;
 -[ RECORD 1 ]-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 position | 0
