@@ -71,7 +71,8 @@ class MessageWidget(Static):
         elif event_type == "LLMResponseReceived":
             parts.append(self._render_llm_response(data))
         elif event_type == "ToolExecutionRequested":
-            parts.append(self._render_tool_request(data))
+            # Skip rendering - tool calls already shown in LLMResponseReceived
+            pass
         elif event_type == "ToolResultReceived":
             parts.append(self._render_tool_result(data))
         elif event_type == "SessionStarted":
@@ -162,40 +163,6 @@ class MessageWidget(Static):
             )
 
         return Group(*parts)
-
-    def _render_tool_request(self, data: dict[str, Any]) -> Panel:
-        """Render a tool execution request.
-
-        Args:
-            data: The event data
-
-        Returns:
-            A Panel containing the formatted tool request
-        """
-        tool_name: str = str(data.get("tool_name", "unknown"))
-        arguments: dict[str, Any] = dict(data.get("arguments", {}))
-
-        # Use syntax highlighting for JSON arguments
-        args_json = json.dumps(arguments, indent=2)
-        syntax = Syntax(
-            args_json,
-            "json",
-            theme="monokai",
-            background_color="default",
-        )
-
-        header = Text()
-        header.append(f"{tool_name}", style="bold yellow")
-        header.append("()\n")
-
-        content = Group(header, syntax)
-
-        return Panel(
-            content,
-            title="[bold yellow]Tool Request[/bold yellow]",
-            border_style="yellow",
-            padding=(0, 1),
-        )
 
     def _render_tool_result(self, data: dict[str, Any]) -> Panel:
         """Render a tool execution result.
