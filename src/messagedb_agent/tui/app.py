@@ -170,6 +170,10 @@ class AgentTUI(App[None]):
             # Update header with thread ID
             self._update_header()
 
+            # Set focus to the input field
+            message_input = self.query_one("#message-input", MessageInput)
+            message_input.focus()
+
             self.log("TUI initialized successfully")
 
         except Exception as e:
