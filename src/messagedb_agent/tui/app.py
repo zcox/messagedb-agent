@@ -76,6 +76,8 @@ class AgentTUI(App[None]):
     BINDINGS = [
         ("q", "quit", "Quit"),
         ("ctrl+c", "quit", "Quit"),
+        ("ctrl+l", "clear_screen", "Clear Screen"),
+        ("f1", "show_help", "Help"),
     ]
 
     def __init__(
@@ -181,10 +183,15 @@ class AgentTUI(App[None]):
         Args:
             message: The submitted message event
         """
+        # Check for special commands (start with /)
+        if message.text.startswith("/"):
+            self._handle_command(message.text)
+            return
+
         # Check if session is completed
         if self.session_completed:
             self.notify(
-                "Session has been completed. Please restart the app for a new session.",
+                "Session has been completed. Use /new to start a new session.",
                 severity="warning",
                 timeout=5,
             )
@@ -572,6 +579,127 @@ class AgentTUI(App[None]):
         self.processing_thread = threading.Thread(target=run_processing, daemon=True)
         self.processing_thread.start()
         self.log("Processing thread started")
+
+    def _handle_command(self, command: str) -> None:
+        """Handle special slash commands.
+
+        Args:
+            command: The command string (including the leading /)
+        """
+        parts = command.split(maxsplit=1)
+        cmd = parts[0].lower()
+        args = parts[1] if len(parts) > 1 else ""
+
+        if cmd == "/quit" or cmd == "/exit":
+            self.exit()
+        elif cmd == "/new":
+            self._handle_new_session()
+        elif cmd == "/thread":
+            if args:
+                self._handle_switch_thread(args)
+            else:
+                self.notify("Usage: /thread <thread_id>", severity="warning", timeout=3)
+        elif cmd == "/help":
+            self._show_help()
+        elif cmd == "/clear":
+            self._clear_messages()
+        else:
+            self.notify(
+                f"Unknown command: {cmd}. Type /help for available commands.",
+                severity="warning",
+                timeout=3,
+            )
+
+    def _handle_new_session(self) -> None:
+        """Start a new session, clearing the current one."""
+        # Stop current subscriber
+        self._stop_subscriber()
+
+        # Reset session state
+        self.thread_id = None
+        self.session_active = False
+        self.session_completed = False
+
+        # Clear message list
+        message_list = self.query_one("#message-list", MessageList)
+        message_list.clear_messages()
+
+        # Re-enable input if it was disabled
+        message_input = self.query_one("#message-input", MessageInput)
+        message_input.disabled = False
+
+        # Update header
+        self._update_header()
+
+        self.notify(
+            "New session ready. Send a message to begin.", severity="information", timeout=3
+        )
+
+    def _handle_switch_thread(self, thread_id: str) -> None:
+        """Switch to a different thread.
+
+        Args:
+            thread_id: The thread ID to switch to
+        """
+        # Stop current subscriber
+        self._stop_subscriber()
+
+        # Reset session state
+        self.thread_id = thread_id.strip()
+        self.session_active = False
+        self.session_completed = False
+
+        # Clear message list
+        message_list = self.query_one("#message-list", MessageList)
+        message_list.clear_messages()
+
+        # Re-enable input if it was disabled
+        message_input = self.query_one("#message-input", MessageInput)
+        message_input.disabled = False
+
+        # Load the thread
+        self._load_existing_session(self.thread_id)
+
+        # Update header
+        self._update_header()
+
+    def _show_help(self) -> None:
+        """Display help information about available commands."""
+        help_text = """
+Available Commands:
+  /help          - Show this help message
+  /quit, /exit   - Exit the application
+  /new           - Start a new conversation
+  /thread <id>   - Switch to a different thread
+  /clear         - Clear the screen (conversation history remains)
+
+Keyboard Shortcuts:
+  Ctrl+Enter     - Send message
+  Ctrl+C, q      - Quit application
+  Ctrl+L         - Clear screen
+  F1             - Show help
+  Tab            - Switch focus (not yet implemented)
+  Up/Down        - Scroll message history
+"""
+        self.notify(help_text, severity="information", timeout=15)
+
+    def _clear_messages(self) -> None:
+        """Clear the message display (but keep conversation in DB)."""
+        message_list = self.query_one("#message-list", MessageList)
+        message_list.clear_messages()
+        self.notify(
+            "Screen cleared. Conversation history remains in database.",
+            severity="information",
+            timeout=3,
+        )
+
+    def action_clear_screen(self) -> None:
+        """Action handler for Ctrl+L to clear screen."""
+        self._clear_messages()
+
+    def action_show_help(self) -> None:
+        """Action handler for F1 to show help."""
+        self._show_help()
 
     def on_unmount(self) -> None:
         """Clean up resources when the TUI is unmounted."""
