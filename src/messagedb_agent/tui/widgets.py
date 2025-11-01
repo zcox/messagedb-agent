@@ -453,9 +453,12 @@ class MessageInput(TextArea):
         Args:
             event: The key event
         """
-        # Ctrl+Enter submits the message
-        # Note: Textual represents this as "ctrl+j" or we can check for ctrl modifier
-        if event.key == "ctrl+j" or event.key == "ctrl+enter":
+        # Try multiple possible representations of Ctrl+Enter
+        # Different terminals may send different codes:
+        # - ctrl+j (common in many terminals)
+        # - ctrl+m (Enter is sometimes Ctrl+M)
+        # - ctrl+enter (Textual's representation)
+        if event.key in ("ctrl+j", "ctrl+m", "ctrl+enter"):
             self._submit_message()
             event.prevent_default()
             event.stop()
