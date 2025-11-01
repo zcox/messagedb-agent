@@ -188,8 +188,8 @@ class AgentTUI(App[None]):
             message: The submitted message event
         """
         # Check for special commands (start with /)
-        if message.text.startswith("/"):
-            self._handle_command(message.text)
+        if message.value.startswith("/"):
+            self._handle_command(message.value)
             return
 
         # Check if session is completed
@@ -209,9 +209,9 @@ class AgentTUI(App[None]):
         try:
             # If no thread_id, start a new session
             if self.thread_id is None:
-                self.log(f"Starting new session with message: {message.text}")
+                self.log(f"Starting new session with message: {message.value}")
                 self.thread_id = start_session(
-                    initial_message=message.text,
+                    initial_message=message.value,
                     store_client=self.store_client,
                     category=self.category,
                     version=self.version,
@@ -228,10 +228,10 @@ class AgentTUI(App[None]):
 
             else:
                 # Add message to existing session
-                self.log(f"Adding message to existing session: {message.text}")
+                self.log(f"Adding message to existing session: {message.value}")
                 add_user_message(
                     thread_id=self.thread_id,
-                    message=message.text,
+                    message=message.value,
                     store_client=self.store_client,
                     category=self.category,
                     version=self.version,

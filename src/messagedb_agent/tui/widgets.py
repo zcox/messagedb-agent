@@ -11,10 +11,9 @@ from rich.console import Group
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.text import Text
-from textual import events, on
+from textual import on
 from textual.containers import VerticalScroll
-from textual.message import Message as TextualMessage
-from textual.widgets import Static, TextArea
+from textual.widgets import Input, Static
 
 from messagedb_agent.store.operations import Message
 
@@ -379,110 +378,48 @@ class MessageList(VerticalScroll):
         return self._message_count
 
 
-class MessageInput(TextArea):
-    """Multi-line text input widget for user messages.
+class MessageInput(Input):
+    """Single-line text input widget for user messages.
 
     This widget provides:
-    - Multi-line text input support
-    - Submit on Ctrl+D (Enter for newline)
+    - Single-line text input (Enter to submit)
     - Auto-clear after submission
     - Edge case handling (empty/whitespace-only messages)
-    - Optional typing indicator
+
+    Uses the built-in Input.Submitted message when Enter is pressed.
     """
-
-    DEFAULT_CSS = """
-    MessageInput {
-        height: auto;
-        max-height: 10;
-        border: solid $primary;
-        background: $surface;
-        padding: 0 1;
-    }
-
-    MessageInput:focus {
-        border: solid $accent;
-    }
-    """
-
-    class Submitted(TextualMessage):
-        """Message sent when user submits input (Ctrl+Enter)."""
-
-        def __init__(self, text: str) -> None:
-            """Initialize the submitted message.
-
-            Args:
-                text: The submitted text content
-            """
-            super().__init__()
-            self.text = text
 
     def __init__(
         self,
-        input_placeholder: str = "Type your message... (Ctrl+D to send)",
+        input_placeholder: str = "Type your message and press Enter...",
         **kwargs: Any,
     ) -> None:
         """Initialize the message input widget.
 
         Args:
             input_placeholder: Placeholder text to show when empty
-            **kwargs: Additional arguments to pass to TextArea
+            **kwargs: Additional arguments to pass to Input
         """
-        # Initialize with language=None for plain text
         super().__init__(
-            text="",
-            language=None,
-            theme="monokai",
-            show_line_numbers=False,
+            placeholder=input_placeholder,
             **kwargs,
         )
 
-    @on(TextArea.Changed)
-    def _on_text_changed(self, event: TextArea.Changed) -> None:
-        """Handle text changes to update height dynamically.
+    @on(Input.Submitted)
+    def _on_input_submitted(self, event: Input.Submitted) -> None:
+        """Handle input submission (Enter key).
 
         Args:
-            event: The text changed event
+            event: The input submitted event
         """
-        # Textual's TextArea handles auto-sizing based on content
-        # We just need to ensure max-height constraint in CSS
-        pass
-
-    async def _on_key(self, event: events.Key) -> None:
-        """Handle key events for custom keybindings.
-
-        Args:
-            event: The key event
-        """
-        # Ctrl+D sends the message (standard "end of input" in terminals)
-        # This is reliable across all terminal emulators
-        if event.key == "ctrl+d":
-            self._submit_message()
-            event.prevent_default()
-            event.stop()
-        # Enter inserts newline (default TextArea behavior)
-        # We don't intercept it - just let it work naturally
-        else:
-            await super()._on_key(event)
-
-    def _submit_message(self) -> None:
-        """Submit the current message if valid."""
-        text = self.text.strip()
+        text = event.value.strip()
 
         # Handle edge case: empty or whitespace-only messages
         if not text:
             # Don't submit empty messages, just clear the input
-            self.clear_input()
+            self.value = ""
             return
 
-        # Post the submitted message
-        self.post_message(self.Submitted(text))
-
         # Clear the input after submission
-        self.clear_input()
-
-    def clear_input(self) -> None:
-        """Clear the input field."""
-        # Use the parent's clear method which returns EditResult
-        super().clear()
-        # Reset cursor to beginning
-        self.move_cursor((0, 0))
+        # The Input.Submitted event will bubble up to the parent
+        self.value = ""
