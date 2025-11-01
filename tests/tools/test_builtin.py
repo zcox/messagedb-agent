@@ -347,8 +347,8 @@ class TestBuiltinToolsIntegration:
         # Register builtin tools
         register_builtin_tools(registry)
 
-        # Verify all tools are available
-        assert len(registry) == 3
+        # Verify all tools are available (including write_note)
+        assert len(registry) == 4
 
         # Execute each tool
         time_result = registry.get("get_current_time").function()
@@ -359,6 +359,9 @@ class TestBuiltinToolsIntegration:
 
         calc_result = registry.get("calculate").function("5 * 5")
         assert calc_result == 25.0
+
+        note_result = registry.get("write_note").function("Test note", "test")
+        assert "Note saved successfully" in note_result
 
     def test_with_tool_executor(self):
         """Test builtin tools with the executor framework."""

@@ -14,6 +14,8 @@ This module implements the tool step, which:
 The tool step is one of the three core step types in the processing loop.
 """
 
+import time
+
 import structlog
 
 from messagedb_agent.events.base import BaseEvent
@@ -26,7 +28,7 @@ from messagedb_agent.events.tool import (
 )
 from messagedb_agent.output import print_tool_result
 from messagedb_agent.projections import project_to_tool_arguments
-from messagedb_agent.store import MessageDBClient, write_message
+from messagedb_agent.store import MessageDBClient, read_stream, write_message
 from messagedb_agent.tools import PermissionLevel, ToolRegistry, execute_tool
 
 logger = structlog.get_logger(__name__)
@@ -190,29 +192,69 @@ def execute_tool_step(
                         f"Failed to write approved event for {tool_name}: {e}"
                     ) from e
             else:
-                # Manual approval required but not implemented yet
-                # For now, reject tools that require approval when auto_approve is False
-                log_tool.warning(
-                    "Tool requires approval but manual approval not implemented yet, rejecting"
-                )
-                approved = False
-                try:
-                    write_message(
-                        client=store_client,
-                        stream_name=stream_name,
-                        message_type=TOOL_EXECUTION_REJECTED,
-                        data={
-                            "tool_name": tool_name,
-                            "rejected_by": "system",
-                            "reason": "Manual approval not implemented yet",
-                        },
-                        metadata={"tool_id": tool_id, "tool_call_id": tool_id, "tool_index": i},
-                    )
-                except Exception as e:
-                    log_tool.error("Failed to write ToolExecutionRejected event", error=str(e))
-                    raise ToolStepError(
-                        f"Failed to write rejected event for {tool_name}: {e}"
-                    ) from e
+                # Manual approval required - wait for user to approve/reject via TUI
+                log_tool.info("Waiting for user approval via TUI")
+
+                # Poll for approval or rejection event
+                # We'll check the stream every 500ms for up to 5 minutes (600 iterations)
+                max_poll_iterations = 600
+                poll_interval_seconds = 0.5
+                approval_received = False
+
+                for _poll_iteration in range(max_poll_iterations):
+                    # Read stream to check for new approval/rejection events
+                    messages = read_stream(store_client, stream_name)
+
+                    # Look for approval or rejection events that match this tool
+                    for msg in messages:
+                        # Check if this is an approval event for our tool
+                        if msg.type == TOOL_EXECUTION_APPROVED:
+                            msg_tool_name = msg.data.get("tool_name", "")
+                            # Match by tool_id in metadata or tool_name
+                            msg_tool_id = msg.metadata.get("tool_id") if msg.metadata else None
+                            if msg_tool_name == tool_name or msg_tool_id == tool_id:
+                                log_tool.info("User approved tool execution")
+                                approved = True
+                                approval_received = True
+                                break
+
+                        # Check if this is a rejection event for our tool
+                        elif msg.type == TOOL_EXECUTION_REJECTED:
+                            msg_tool_name = msg.data.get("tool_name", "")
+                            msg_tool_id = msg.metadata.get("tool_id") if msg.metadata else None
+                            if msg_tool_name == tool_name or msg_tool_id == tool_id:
+                                log_tool.info("User rejected tool execution")
+                                approved = False
+                                approval_received = True
+                                break
+
+                    if approval_received:
+                        break
+
+                    # Sleep before next poll
+                    time.sleep(poll_interval_seconds)
+
+                # If no approval received after timeout, reject
+                if not approval_received:
+                    log_tool.warning("Approval timeout - rejecting tool execution")
+                    approved = False
+                    try:
+                        write_message(
+                            client=store_client,
+                            stream_name=stream_name,
+                            message_type=TOOL_EXECUTION_REJECTED,
+                            data={
+                                "tool_name": tool_name,
+                                "rejected_by": "system",
+                                "reason": "Approval timeout",
+                            },
+                            metadata={"tool_id": tool_id, "tool_call_id": tool_id, "tool_index": i},
+                        )
+                    except Exception as e:
+                        log_tool.error("Failed to write timeout rejection event", error=str(e))
+                        raise ToolStepError(
+                            f"Failed to write timeout rejection for {tool_name}: {e}"
+                        ) from e
 
         # Step 2d: Execute tool if approved, otherwise write failure
         if not approved:
@@ -224,7 +266,7 @@ def execute_tool_step(
             print_tool_result(
                 tool_name=tool_name,
                 success=False,
-                error="Tool execution rejected: Manual approval not implemented yet",
+                error="Tool execution rejected by user or permission system",
                 execution_time_ms=0,
             )
 

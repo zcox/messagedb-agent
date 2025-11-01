@@ -9,11 +9,23 @@ from textual.widgets import Footer, Header
 from messagedb_agent.config import Config, load_config
 from messagedb_agent.engine.loop import process_thread
 from messagedb_agent.engine.session import add_user_message, start_session
+from messagedb_agent.events.tool import (
+    TOOL_EXECUTION_APPROVED,
+    TOOL_EXECUTION_REJECTED,
+    TOOL_EXECUTION_REQUESTED,
+)
 from messagedb_agent.llm import create_llm_client
 from messagedb_agent.llm.base import BaseLLMClient
-from messagedb_agent.store import Message, MessageDBClient, MessageDBConfig, read_stream
+from messagedb_agent.store import (
+    Message,
+    MessageDBClient,
+    MessageDBConfig,
+    read_stream,
+    write_message,
+)
 from messagedb_agent.subscriber import InMemoryPositionStore, Subscriber
-from messagedb_agent.tools import ToolRegistry, register_builtin_tools
+from messagedb_agent.tools import PermissionLevel, ToolRegistry, register_builtin_tools
+from messagedb_agent.tui.approval_modal import ToolApprovalModal
 from messagedb_agent.tui.widgets import MessageInput, MessageList
 
 
@@ -324,6 +336,121 @@ class AgentTUI(App[None]):
 
             self.notify("Session completed", severity="information", timeout=5)
 
+        # Handle ToolExecutionRequested event - check if approval needed
+        elif message.type == TOOL_EXECUTION_REQUESTED:
+            self._handle_tool_execution_requested(message)
+
+    def _handle_tool_execution_requested(self, message: Message) -> None:
+        """Handle ToolExecutionRequested event and prompt for approval if needed.
+
+        This method checks if the requested tool requires approval based on its
+        permission level. If approval is required, it shows the approval modal
+        and writes the approval/rejection event based on user response.
+
+        Args:
+            message: The ToolExecutionRequested event message
+        """
+        if self.tool_registry is None or self.store_client is None or self.thread_id is None:
+            self.log("Cannot handle tool approval: clients not initialized")
+            return
+
+        # Extract tool info from message data
+        tool_name = message.data.get("tool_name", "unknown")
+        arguments = message.data.get("arguments", {})
+
+        # Check if tool exists and requires approval
+        if not self.tool_registry.has(tool_name):
+            self.log(f"Tool {tool_name} not found in registry, skipping approval check")
+            return
+
+        tool_obj = self.tool_registry.get(tool_name)
+        permission_level = tool_obj.permission_level
+
+        # Only show approval modal for tools that require approval
+        if permission_level not in (PermissionLevel.REQUIRES_APPROVAL, PermissionLevel.DANGEROUS):
+            self.log(f"Tool {tool_name} is SAFE, no approval needed")
+            return
+
+        self.log(f"Tool {tool_name} requires approval, showing modal")
+
+        # Show approval modal asynchronously
+        async def show_approval_and_respond() -> None:
+            """Async function to show modal and handle response."""
+            if self.store_client is None or self.thread_id is None:
+                return
+
+            # Show modal and wait for user response
+            approved = await self.push_screen_wait(
+                ToolApprovalModal(
+                    tool_name=tool_name,
+                    arguments=arguments,
+                    permission_level=permission_level.value,
+                )
+            )
+
+            # Build stream name
+            stream_name = f"{self.category}:{self.version}-{self.thread_id}"
+
+            # Get metadata from original message (includes tool_id, tool_call_id, tool_index)
+            metadata = message.metadata or {}
+
+            if approved:
+                # User approved - write ToolExecutionApproved event
+                self.log(f"User approved tool {tool_name}")
+                try:
+                    write_message(
+                        client=self.store_client,
+                        stream_name=stream_name,
+                        message_type=TOOL_EXECUTION_APPROVED,
+                        data={
+                            "tool_name": tool_name,
+                            "approved_by": "user",
+                        },
+                        metadata=metadata,
+                    )
+                    self.notify(
+                        f"Approved: {tool_name}",
+                        severity="information",
+                        timeout=3,
+                    )
+                except Exception as e:
+                    self.log(f"Error writing approval event: {e}")
+                    self.notify(
+                        f"Error writing approval: {e}",
+                        severity="error",
+                        timeout=5,
+                    )
+            else:
+                # User rejected - write ToolExecutionRejected event
+                self.log(f"User rejected tool {tool_name}")
+                try:
+                    write_message(
+                        client=self.store_client,
+                        stream_name=stream_name,
+                        message_type=TOOL_EXECUTION_REJECTED,
+                        data={
+                            "tool_name": tool_name,
+                            "rejected_by": "user",
+                            "reason": "User rejected execution",
+                        },
+                        metadata=metadata,
+                    )
+                    self.notify(
+                        f"Rejected: {tool_name}",
+                        severity="warning",
+                        timeout=3,
+                    )
+                except Exception as e:
+                    self.log(f"Error writing rejection event: {e}")
+                    self.notify(
+                        f"Error writing rejection: {e}",
+                        severity="error",
+                        timeout=5,
+                    )
+
+        # Schedule the async function to run
+        self.call_later(show_approval_and_respond)
+
     def show_loading(self, message: str = "Loading...") -> None:
         """Show a loading indicator in the message list.
 
@@ -429,7 +556,7 @@ class AgentTUI(App[None]):
                     llm_client=self.llm_client,
                     tool_registry=self.tool_registry,
                     max_iterations=100,
-                    auto_approve_tools=True,
+                    auto_approve_tools=False,  # Use manual approval via TUI modal
                 )
                 self.log("Processing loop completed")
             except Exception as e:

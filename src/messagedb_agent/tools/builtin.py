@@ -170,6 +170,29 @@ def calculate(expression: str) -> float:
         raise ValueError(f"Error evaluating expression: {e}") from e
 
 
+def write_note(content: str, category: str = "general") -> str:
+    """Write a note to memory (simulated).
+
+    This tool demonstrates permission-based execution. It simulates writing
+    a note to persistent storage, which requires user approval.
+
+    Args:
+        content: The content of the note to write
+        category: Category/tag for the note (default: general)
+
+    Returns:
+        Confirmation message with note ID
+
+    Example:
+        >>> write_note("Remember to review PR", "work")
+        'Note saved successfully (ID: note_1234)'
+    """
+    # In a real implementation, this would write to a database or file
+    # For now, just return a success message
+    note_id = f"note_{abs(hash(content)) % 10000}"
+    return f"Note saved successfully (ID: {note_id}, category: {category})"
+
+
 def get_builtin_tools() -> dict[str, Any]:
     """Get a dictionary of all built-in tools.
 
@@ -185,6 +208,7 @@ def get_builtin_tools() -> dict[str, Any]:
         "get_current_time": get_current_time,
         "echo": echo,
         "calculate": calculate,
+        "write_note": write_note,
     }
 
 
@@ -201,25 +225,36 @@ def register_builtin_tools(registry: Any) -> None:
         >>> "echo" in registry
         True
     """
-    from messagedb_agent.tools.registry import register_tool
+    from messagedb_agent.tools.registry import PermissionLevel, register_tool
 
-    # Register get_current_time
+    # Register get_current_time (SAFE - no approval needed)
     register_tool(
         registry,
         name="get_current_time",
         description="Get the current date and time in ISO 8601 format",
+        permission_level=PermissionLevel.SAFE,
     )(get_current_time)
 
-    # Register echo
+    # Register echo (SAFE - no approval needed)
     register_tool(
         registry,
         name="echo",
         description="Echo a message back (useful for testing)",
+        permission_level=PermissionLevel.SAFE,
     )(echo)
 
-    # Register calculate
+    # Register calculate (SAFE - no approval needed)
     register_tool(
         registry,
         name="calculate",
         description="Safely evaluate a mathematical expression (supports +, -, *, /, //, %, **)",
+        permission_level=PermissionLevel.SAFE,
     )(calculate)
+
+    # Register write_note (REQUIRES_APPROVAL - demonstrates permission system)
+    register_tool(
+        registry,
+        name="write_note",
+        description="Write a note to memory. This tool requires user approval to execute.",
+        permission_level=PermissionLevel.REQUIRES_APPROVAL,
+    )(write_note)

@@ -185,9 +185,9 @@ class TestRegistryToFunctionDeclarations:
 
         declarations = registry_to_function_declarations(registry)
 
-        assert len(declarations) == 3
+        assert len(declarations) == 4
         tool_names = {decl.name for decl in declarations}
-        assert tool_names == {"get_current_time", "echo", "calculate"}
+        assert tool_names == {"get_current_time", "echo", "calculate", "write_note"}
 
     def test_all_registry_tools_converted(self, sample_tools):
         """Test that all tools in registry are converted."""
