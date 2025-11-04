@@ -84,17 +84,23 @@ def create_app() -> FastAPI:
             )
 
             # LLM config for agent processing (if needed)
+            # Falls back to MODEL_NAME from .env if AGENT_MODEL not set
             agent_llm_config = VertexAIConfig(
                 project=os.getenv("GCP_PROJECT", ""),
                 location=os.getenv("GCP_LOCATION", "us-central1"),
-                model_name=os.getenv("AGENT_MODEL", "gemini-2.0-flash-exp"),
+                model_name=os.getenv(
+                    "AGENT_MODEL", os.getenv("MODEL_NAME", "gemini-2.0-flash-001")
+                ),
             )
 
-            # LLM config for HTML rendering (use fast model)
+            # LLM config for HTML rendering (use fast/cheap model)
+            # Falls back to MODEL_NAME from .env if RENDER_MODEL not set
             render_llm_config = VertexAIConfig(
                 project=os.getenv("GCP_PROJECT", ""),
                 location=os.getenv("GCP_LOCATION", "us-central1"),
-                model_name=os.getenv("RENDER_MODEL", "gemini-2.0-flash-exp"),
+                model_name=os.getenv(
+                    "RENDER_MODEL", os.getenv("MODEL_NAME", "gemini-2.0-flash-001")
+                ),
             )
 
             stream_name = f"agent:v0-{request.thread_id}"
