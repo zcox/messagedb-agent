@@ -44,6 +44,7 @@ dev = [
 
 [project.scripts]
 messagedb-agent = "messagedb_agent.__main__:main"
+messagedb-agent-api = "messagedb_agent.display.service:main"
 
 [build-system]
 requires = ["hatchling"]
