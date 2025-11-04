@@ -8,6 +8,7 @@ import os
 from typing import Any
 
 import structlog
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 
 from messagedb_agent.config import VertexAIConfig
@@ -16,6 +17,9 @@ from messagedb_agent.display.models import RenderRequest, RenderResponse
 from messagedb_agent.display.renderer import render_html
 from messagedb_agent.projections.display_prefs import project_display_prefs
 from messagedb_agent.store import MessageDBClient, MessageDBConfig, read_stream, write_message
+
+# Load environment variables from .env file
+load_dotenv()
 
 logger = structlog.get_logger(__name__)
 
