@@ -89,7 +89,7 @@ def create_app() -> FastAPI:
                 project=os.getenv("GCP_PROJECT", ""),
                 location=os.getenv("GCP_LOCATION", "us-central1"),
                 model_name=os.getenv(
-                    "AGENT_MODEL", os.getenv("MODEL_NAME", "gemini-2.0-flash-001")
+                    "AGENT_MODEL", os.getenv("MODEL_NAME", "gemini-2.5-flash")
                 ),
             )
 
@@ -99,7 +99,7 @@ def create_app() -> FastAPI:
                 project=os.getenv("GCP_PROJECT", ""),
                 location=os.getenv("GCP_LOCATION", "us-central1"),
                 model_name=os.getenv(
-                    "RENDER_MODEL", os.getenv("MODEL_NAME", "gemini-2.0-flash-001")
+                    "RENDER_MODEL", os.getenv("MODEL_NAME", "gemini-2.5-flash")
                 ),
             )
 
