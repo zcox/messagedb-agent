@@ -21,7 +21,9 @@ classifiers = [
 
 dependencies = [
     "anthropic[vertex]>=0.42.0",
+    "fastapi>=0.115.0",
     "google-cloud-aiplatform>=1.121.0",
+    "nh3>=0.2.15",
     "opentelemetry-api>=1.38.0",
     "opentelemetry-sdk>=1.38.0",
     "psycopg>=3.2.11",
@@ -29,6 +31,7 @@ dependencies = [
     "python-dotenv>=1.1.1",
     "structlog>=25.4.0",
     "textual>=0.50.0",
+    "uvicorn>=0.32.0",
 ]
 
 [project.optional-dependencies]
