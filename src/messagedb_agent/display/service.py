@@ -5,6 +5,7 @@ that processes user messages and renders event streams as HTML.
 """
 
 import os
+from datetime import UTC
 from typing import Any
 
 import structlog
@@ -103,16 +104,19 @@ def create_app() -> FastAPI:
             if request.user_message:
                 log.info("Processing user message")
 
-                # Write UserMessageSent event
+                # Write UserMessageAdded event
                 with MessageDBClient(db_config) as store_client:
+                    from datetime import datetime
+
                     event_data: dict[str, Any] = {
-                        "text": request.user_message,
+                        "message": request.user_message,
+                        "timestamp": datetime.now(UTC).isoformat(),
                     }
 
                     write_message(
                         client=store_client,
                         stream_name=stream_name,
-                        message_type="UserMessageSent",
+                        message_type="UserMessageAdded",
                         data=event_data,
                         metadata={},
                     )
