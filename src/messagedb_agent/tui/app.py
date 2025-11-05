@@ -187,14 +187,17 @@ class AgentTUI(App[None]):
         Args:
             event: The submitted message event
         """
-        self.log(f"on_input_submitted called with value: {event.value}")
+        self.log(f"[AgentTUI.on_input_submitted] START - event.value={event.value!r}")
+
         # Check for special commands (start with /)
         if event.value.startswith("/"):
+            self.log(f"[AgentTUI.on_input_submitted] Handling command: {event.value}")
             self._handle_command(event.value)
             return
 
         # Check if session is completed
         if self.session_completed:
+            self.log("[AgentTUI.on_input_submitted] Session already completed")
             self.notify(
                 "Session has been completed. Use /new to start a new session.",
                 severity="warning",
@@ -204,32 +207,37 @@ class AgentTUI(App[None]):
 
         # Check if clients are initialized
         if self.store_client is None or self.llm_client is None or self.tool_registry is None:
+            self.log("[AgentTUI.on_input_submitted] Clients not initialized")
             self.notify("Error: System not initialized", severity="error", timeout=5)
             return
 
         try:
             # If no thread_id, start a new session
             if self.thread_id is None:
-                self.log(f"Starting new session with message: {event.value}")
+                self.log(f"[AgentTUI.on_input_submitted] Creating new session: {event.value!r}")
                 self.thread_id = start_session(
                     initial_message=event.value,
                     store_client=self.store_client,
                     category=self.category,
                     version=self.version,
                 )
+                self.log(f"[AgentTUI.on_input_submitted] Session created: {self.thread_id}")
                 self.session_active = True
                 self._update_header()
                 self.notify(f"Session started: {self.thread_id}", severity="information", timeout=3)
 
                 # Start subscriber for real-time updates
+                self.log("[AgentTUI.on_input_submitted] Starting subscriber")
                 self._start_subscriber(self.thread_id)
 
                 # Start processing in background thread
+                self.log("[AgentTUI.on_input_submitted] Starting processing thread")
                 self._start_processing()
+                self.log("[AgentTUI.on_input_submitted] Processing thread started")
 
             else:
                 # Add message to existing session
-                self.log(f"Adding message to existing session: {event.value}")
+                self.log(f"[AgentTUI.on_input_submitted] Adding to session: {event.value!r}")
                 add_user_message(
                     thread_id=self.thread_id,
                     message=event.value,
@@ -240,10 +248,16 @@ class AgentTUI(App[None]):
 
                 # If processing thread is not running, start it
                 if self.processing_thread is None or not self.processing_thread.is_alive():
+                    self.log("[AgentTUI.on_input_submitted] Restarting processing thread")
                     self._start_processing()
 
+            self.log("[AgentTUI.on_input_submitted] END - success")
+
         except Exception as e:
-            self.log(f"Error handling message submission: {e}")
+            self.log(f"[AgentTUI.on_input_submitted] ERROR: {e}")
+            import traceback
+
+            self.log(f"[AgentTUI.on_input_submitted] Traceback: {traceback.format_exc()}")
             self.notify(f"Error: {e}", severity="error", timeout=10)
 
     def _start_subscriber(self, thread_id: str, start_position: int = 0) -> None:
@@ -538,16 +552,18 @@ class AgentTUI(App[None]):
 
     def _start_processing(self) -> None:
         """Start the processing loop in a background thread."""
+        self.log("[_start_processing] START")
         if self.thread_id is None:
-            self.log("Cannot start processing: no thread_id")
+            self.log("[_start_processing] Cannot start processing: no thread_id")
             return
 
         if self.store_client is None or self.llm_client is None or self.tool_registry is None:
-            self.log("Cannot start processing: clients not initialized")
+            self.log("[_start_processing] Cannot start processing: clients not initialized")
             return
 
         # Build stream name
         stream_name = f"{self.category}:{self.version}-{self.thread_id}"
+        self.log(f"[_start_processing] Stream name: {stream_name}")
 
         # Define processing function to run in background
         def run_processing() -> None:
@@ -560,7 +576,7 @@ class AgentTUI(App[None]):
                 return
 
             try:
-                self.log("Starting processing loop")
+                self.log("[run_processing] THREAD STARTED - calling process_thread()")
                 process_thread(
                     thread_id=self.thread_id,
                     stream_name=stream_name,
@@ -570,9 +586,12 @@ class AgentTUI(App[None]):
                     max_iterations=100,
                     auto_approve_tools=False,  # Use manual approval via TUI modal
                 )
-                self.log("Processing loop completed")
+                self.log("[run_processing] THREAD FINISHED - process_thread() completed")
             except Exception as e:
-                self.log(f"Processing error: {e}")
+                self.log(f"[run_processing] THREAD ERROR: {e}")
+                import traceback
+
+                self.log(f"[run_processing] Traceback: {traceback.format_exc()}")
                 self.call_from_thread(
                     self.notify,
                     f"Processing error: {e}",
@@ -581,9 +600,11 @@ class AgentTUI(App[None]):
                 )
 
         # Start processing thread
+        self.log("[_start_processing] Creating thread")
         self.processing_thread = threading.Thread(target=run_processing, daemon=True)
+        self.log("[_start_processing] Starting thread")
         self.processing_thread.start()
-        self.log("Processing thread started")
+        self.log("[_start_processing] Thread started successfully")
 
     def _handle_command(self, command: str) -> None:
         """Handle special slash commands.
