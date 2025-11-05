@@ -4,7 +4,7 @@ import threading
 
 from textual.app import App, ComposeResult
 from textual.containers import Container, Vertical
-from textual.widgets import Footer, Header
+from textual.widgets import Footer, Header, Input
 
 from messagedb_agent.config import Config, load_config
 from messagedb_agent.engine.loop import process_thread
@@ -181,15 +181,16 @@ class AgentTUI(App[None]):
             # Show error to user
             self.notify(f"Error: {e}", severity="error", timeout=10)
 
-    def on_message_input_submitted(self, message: MessageInput.Submitted) -> None:
+    def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle message input submission.
 
         Args:
-            message: The submitted message event
+            event: The submitted message event
         """
+        self.log(f"on_input_submitted called with value: {event.value}")
         # Check for special commands (start with /)
-        if message.value.startswith("/"):
-            self._handle_command(message.value)
+        if event.value.startswith("/"):
+            self._handle_command(event.value)
             return
 
         # Check if session is completed
@@ -209,9 +210,9 @@ class AgentTUI(App[None]):
         try:
             # If no thread_id, start a new session
             if self.thread_id is None:
-                self.log(f"Starting new session with message: {message.value}")
+                self.log(f"Starting new session with message: {event.value}")
                 self.thread_id = start_session(
-                    initial_message=message.value,
+                    initial_message=event.value,
                     store_client=self.store_client,
                     category=self.category,
                     version=self.version,
@@ -228,10 +229,10 @@ class AgentTUI(App[None]):
 
             else:
                 # Add message to existing session
-                self.log(f"Adding message to existing session: {message.value}")
+                self.log(f"Adding message to existing session: {event.value}")
                 add_user_message(
                     thread_id=self.thread_id,
-                    message=message.value,
+                    message=event.value,
                     store_client=self.store_client,
                     category=self.category,
                     version=self.version,
