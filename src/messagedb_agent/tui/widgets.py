@@ -413,38 +413,26 @@ class MessageInput(Input):
         Args:
             event: The input submitted event
         """
-        import sys
+        from messagedb_agent.tui.app import debug_log
 
-        print(
-            f"[MessageInput.on_input_submitted] START - event.value={event.value!r}",
-            file=sys.stderr,
-        )
+        debug_log(f"[MessageInput.on_input_submitted] START - event.value={event.value!r}")
 
         text = event.value.strip()
 
         # Handle edge case: empty or whitespace-only messages
         if not text:
             # Don't submit empty messages, just clear the input and stop propagation
-            print(
-                "[MessageInput.on_input_submitted] Empty message, stopping propagation",
-                file=sys.stderr,
-            )
+            debug_log("[MessageInput.on_input_submitted] Empty message, stopping propagation")
             self.value = ""
             event.stop()
             return
 
         # Update the event value to the trimmed text
         event.value = text
-        print(
-            f"[MessageInput.on_input_submitted] Trimmed text={text!r}, clearing input",
-            file=sys.stderr,
-        )
+        debug_log(f"[MessageInput.on_input_submitted] Trimmed text={text!r}, clearing input")
 
         # Clear the input after submission
         self.value = ""
 
-        print(
-            "[MessageInput.on_input_submitted] END - allowing event to bubble",
-            file=sys.stderr,
-        )
+        debug_log("[MessageInput.on_input_submitted] END - allowing event to bubble")
         # Don't call event.stop() - let it bubble to the parent

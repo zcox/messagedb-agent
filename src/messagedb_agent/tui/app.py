@@ -1,6 +1,5 @@
 """Main TUI application for interactive agent conversations."""
 
-import sys
 import threading
 
 from textual.app import App, ComposeResult
@@ -31,8 +30,13 @@ from messagedb_agent.tui.widgets import MessageInput, MessageList
 
 
 def debug_log(msg: str) -> None:
-    """Print debug message to stderr."""
-    print(msg, file=sys.stderr, flush=True)
+    """Print debug message to a log file."""
+    with open("/tmp/tui_debug.log", "a") as f:
+        import datetime
+
+        timestamp = datetime.datetime.now().isoformat()
+        f.write(f"{timestamp} {msg}\n")
+        f.flush()
 
 
 class AgentTUI(App[None]):
