@@ -1,12 +1,43 @@
 // Chat UI logic for the agent display service
-// This script handles user input and HTML rendering
+// This script handles user input and HTML rendering with streaming progress
 
 const THREAD_ID = window.THREAD_ID;
 let currentHTML = null;
 let isProcessing = false;
 
 /**
- * Refresh the display by calling the /render endpoint
+ * Update the progress indicator
+ * @param {string} message - Progress message to display
+ * @param {object|null} details - Optional progress details
+ */
+function updateProgress(message, details = null) {
+    const progressDiv = document.getElementById('progress-indicator');
+    if (!progressDiv) return;
+
+    progressDiv.style.display = 'block';
+    progressDiv.querySelector('.progress-message').textContent = message;
+
+    // Update details if provided
+    if (details) {
+        const detailsText = Object.entries(details)
+            .map(([key, value]) => `${key}: ${value}`)
+            .join(', ');
+        progressDiv.querySelector('.progress-details').textContent = detailsText;
+    }
+}
+
+/**
+ * Hide the progress indicator
+ */
+function hideProgress() {
+    const progressDiv = document.getElementById('progress-indicator');
+    if (progressDiv) {
+        progressDiv.style.display = 'none';
+    }
+}
+
+/**
+ * Refresh the display using Server-Sent Events for progress updates
  * @param {string|null} userMessage - Optional user message to send
  */
 async function refresh(userMessage = null) {
@@ -15,9 +46,11 @@ async function refresh(userMessage = null) {
         if (userMessage) {
             isProcessing = true;
             updateUIState();
+            updateProgress('Starting...', null);
         }
 
-        const resp = await fetch('/render', {
+        // Use fetch to POST the request, then process SSE stream
+        const resp = await fetch('/render-stream', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
@@ -31,20 +64,64 @@ async function refresh(userMessage = null) {
             throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
         }
 
-        const data = await resp.json();
-        currentHTML = data.html;
+        // Process the SSE stream
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
 
-        // Update display
-        document.getElementById('content').innerHTML = data.html;
+        while (true) {
+            const {done, value} = await reader.read();
+            if (done) break;
 
-        // Scroll to bottom
-        const content = document.getElementById('content');
-        content.scrollTop = content.scrollHeight;
+            // Decode the chunk and add to buffer
+            buffer += decoder.decode(value, {stream: true});
+
+            // Process complete SSE messages (ending with \n\n)
+            const messages = buffer.split('\n\n');
+            buffer = messages.pop() || ''; // Keep incomplete message in buffer
+
+            for (const message of messages) {
+                if (!message.trim()) continue;
+
+                // Parse SSE message
+                const lines = message.split('\n');
+                let eventType = 'message';
+                let data = null;
+
+                for (const line of lines) {
+                    if (line.startsWith('event: ')) {
+                        eventType = line.substring(7);
+                    } else if (line.startsWith('data: ')) {
+                        data = JSON.parse(line.substring(6));
+                    }
+                }
+
+                // Handle different event types
+                if (eventType === 'message' && data) {
+                    // Progress update
+                    updateProgress(data.message, data.details);
+                } else if (eventType === 'result' && data) {
+                    // Final result
+                    currentHTML = data.html;
+                    document.getElementById('content').innerHTML = data.html;
+
+                    // Scroll to bottom
+                    const content = document.getElementById('content');
+                    content.scrollTop = content.scrollHeight;
+
+                    hideProgress();
+                } else if (eventType === 'error' && data) {
+                    // Error occurred
+                    throw new Error(data.error);
+                }
+            }
+        }
 
     } catch (error) {
         console.error('Refresh failed:', error);
         document.getElementById('content').innerHTML =
             `<div style="color: red; padding: 20px;">Error: ${error.message}</div>`;
+        hideProgress();
     } finally {
         if (userMessage) {
             isProcessing = false;

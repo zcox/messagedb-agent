@@ -18,6 +18,51 @@
             overflow-y: auto;
             padding: 20px;
         }
+        #progress-indicator {
+            display: none;
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            border: 2px solid #007bff;
+            border-radius: 8px;
+            padding: 16px 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            max-width: 400px;
+            z-index: 1000;
+        }
+        .progress-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+        .progress-spinner {
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #007bff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .progress-title {
+            font-weight: 600;
+            color: #007bff;
+        }
+        .progress-message {
+            color: #333;
+            font-size: 14px;
+            margin-bottom: 4px;
+        }
+        .progress-details {
+            color: #666;
+            font-size: 12px;
+            font-family: 'Courier New', monospace;
+        }
         #chat-input {
             border-top: 1px solid #ccc;
             padding: 20px;
@@ -56,6 +101,15 @@
     </style>
 </head>
 <body>
+    <div id="progress-indicator">
+        <div class="progress-header">
+            <div class="progress-spinner"></div>
+            <div class="progress-title">Processing</div>
+        </div>
+        <div class="progress-message">Starting...</div>
+        <div class="progress-details"></div>
+    </div>
+
     <div id="content">Loading...</div>
 
     <div id="chat-input">
