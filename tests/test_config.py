@@ -323,7 +323,8 @@ class TestLoadConfig:
         monkeypatch.setenv("LOG_LEVEL", "DEBUG")
         monkeypatch.setenv("LOG_FORMAT", "text")
 
-        config = load_config()
+        # Pass empty env_file to prevent loading from .env
+        config = load_config(env_file="/dev/null")
 
         assert config.message_db.host == "testhost"
         assert config.message_db.port == 5433
@@ -340,16 +341,26 @@ class TestLoadConfig:
 
     def test_load_config_with_defaults(self, monkeypatch):
         """load_config uses defaults for optional environment variables."""
+        # Clear ALL environment variables that load_config uses
+        monkeypatch.delenv("DB_HOST", raising=False)
+        monkeypatch.delenv("DB_PORT", raising=False)
+        monkeypatch.delenv("DB_NAME", raising=False)
+        monkeypatch.delenv("GCP_LOCATION", raising=False)
+        monkeypatch.delenv("MODEL_NAME", raising=False)
+        monkeypatch.delenv("MAX_ITERATIONS", raising=False)
+        monkeypatch.delenv("ENABLE_TRACING", raising=False)
+        monkeypatch.delenv("LOG_LEVEL", raising=False)
+        monkeypatch.delenv("LOG_FORMAT", raising=False)
+        monkeypatch.delenv("AUTO_APPROVE_TOOLS", raising=False)
+        monkeypatch.delenv("APPROVAL_TIMEOUT_SECONDS", raising=False)
+
         # Set only required variables
         monkeypatch.setenv("DB_USER", "testuser")
         monkeypatch.setenv("DB_PASSWORD", "testpass")
         monkeypatch.setenv("GCP_PROJECT", "test-project")
 
-        # Clear optional variables to test defaults
-        monkeypatch.delenv("GCP_LOCATION", raising=False)
-        monkeypatch.delenv("MODEL_NAME", raising=False)
-
-        config = load_config()
+        # Pass empty env_file to prevent loading from .env
+        config = load_config(env_file="/dev/null")
 
         # Check defaults
         assert config.message_db.host == "localhost"
@@ -364,19 +375,25 @@ class TestLoadConfig:
 
     def test_load_config_missing_db_user(self, monkeypatch):
         """load_config raises ValueError if DB_USER is missing."""
+        # Clear DB_USER to ensure it's not loaded from .env
+        monkeypatch.delenv("DB_USER", raising=False)
         monkeypatch.setenv("DB_PASSWORD", "testpass")
         monkeypatch.setenv("GCP_PROJECT", "test-project")
 
+        # Pass empty env_file to prevent loading from .env
         with pytest.raises(ValueError, match="Required environment variable DB_USER"):
-            load_config()
+            load_config(env_file="/dev/null")
 
     def test_load_config_missing_db_password(self, monkeypatch):
         """load_config raises ValueError if DB_PASSWORD is missing."""
+        # Clear DB_PASSWORD to ensure it's not loaded from .env
+        monkeypatch.delenv("DB_PASSWORD", raising=False)
         monkeypatch.setenv("DB_USER", "testuser")
         monkeypatch.setenv("GCP_PROJECT", "test-project")
 
+        # Pass empty env_file to prevent loading from .env
         with pytest.raises(ValueError, match="Required environment variable DB_PASSWORD"):
-            load_config()
+            load_config(env_file="/dev/null")
 
     def test_load_config_missing_gcp_project(self, monkeypatch):
         """load_config raises ValueError if GCP_PROJECT is missing."""
@@ -386,8 +403,9 @@ class TestLoadConfig:
         # Ensure GCP_PROJECT is not set
         monkeypatch.delenv("GCP_PROJECT", raising=False)
 
+        # Pass empty env_file to prevent loading from .env
         with pytest.raises(ValueError, match="Required environment variable GCP_PROJECT"):
-            load_config()
+            load_config(env_file="/dev/null")
 
     def test_load_config_enable_tracing_false(self, monkeypatch):
         """load_config parses ENABLE_TRACING=false correctly."""
@@ -396,7 +414,8 @@ class TestLoadConfig:
         monkeypatch.setenv("GCP_PROJECT", "test-project")
         monkeypatch.setenv("ENABLE_TRACING", "false")
 
-        config = load_config()
+        # Pass empty env_file to prevent loading from .env
+        config = load_config(env_file="/dev/null")
 
         assert config.processing.enable_tracing is False
 
@@ -407,6 +426,7 @@ class TestLoadConfig:
         monkeypatch.setenv("GCP_PROJECT", "test-project")
         monkeypatch.setenv("ENABLE_TRACING", "maybe")
 
-        config = load_config()
+        # Pass empty env_file to prevent loading from .env
+        config = load_config(env_file="/dev/null")
 
         assert config.processing.enable_tracing is False
