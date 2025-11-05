@@ -11,7 +11,6 @@ from rich.console import Group
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.text import Text
-from textual import on
 from textual.containers import VerticalScroll
 from textual.widgets import Input, Static
 
@@ -405,9 +404,11 @@ class MessageInput(Input):
             **kwargs,
         )
 
-    @on(Input.Submitted)
-    def _on_input_submitted(self, event: Input.Submitted) -> None:
+    def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle input submission (Enter key).
+
+        This method is called when the user presses Enter. We validate and trim
+        the input, but don't stop the event from bubbling to the parent.
 
         Args:
             event: The input submitted event
@@ -416,10 +417,15 @@ class MessageInput(Input):
 
         # Handle edge case: empty or whitespace-only messages
         if not text:
-            # Don't submit empty messages, just clear the input
+            # Don't submit empty messages, just clear the input and stop propagation
             self.value = ""
+            event.stop()
             return
 
+        # Update the event value to the trimmed text
+        event.value = text
+
         # Clear the input after submission
-        # The Input.Submitted event will bubble up to the parent
         self.value = ""
+
+        # Don't call event.stop() - let it bubble to the parent
