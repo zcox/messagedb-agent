@@ -413,31 +413,38 @@ class MessageInput(Input):
         Args:
             event: The input submitted event
         """
-        from messagedb_agent.tui.app import AgentTUI
+        import sys
 
-        app = self.app
-        if isinstance(app, AgentTUI):
-            app.log(f"[MessageInput.on_input_submitted] START - event.value={event.value!r}")
+        print(
+            f"[MessageInput.on_input_submitted] START - event.value={event.value!r}",
+            file=sys.stderr,
+        )
 
         text = event.value.strip()
 
         # Handle edge case: empty or whitespace-only messages
         if not text:
             # Don't submit empty messages, just clear the input and stop propagation
-            if isinstance(app, AgentTUI):
-                app.log("[MessageInput.on_input_submitted] Empty message, stopping propagation")
+            print(
+                "[MessageInput.on_input_submitted] Empty message, stopping propagation",
+                file=sys.stderr,
+            )
             self.value = ""
             event.stop()
             return
 
         # Update the event value to the trimmed text
         event.value = text
-        if isinstance(app, AgentTUI):
-            app.log(f"[MessageInput.on_input_submitted] Trimmed text={text!r}, clearing input")
+        print(
+            f"[MessageInput.on_input_submitted] Trimmed text={text!r}, clearing input",
+            file=sys.stderr,
+        )
 
         # Clear the input after submission
         self.value = ""
 
-        if isinstance(app, AgentTUI):
-            app.log("[MessageInput.on_input_submitted] END - allowing event to bubble")
+        print(
+            "[MessageInput.on_input_submitted] END - allowing event to bubble",
+            file=sys.stderr,
+        )
         # Don't call event.stop() - let it bubble to the parent
