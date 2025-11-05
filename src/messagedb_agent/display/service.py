@@ -6,11 +6,15 @@ that processes user messages and renders event streams as HTML.
 
 import os
 from datetime import UTC
+from pathlib import Path
 from typing import Any
 
 import structlog
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 
 from messagedb_agent.config import VertexAIConfig
 from messagedb_agent.display.agent_runner import run_agent_step
@@ -36,6 +40,30 @@ def create_app() -> FastAPI:
         description="Renders agent event streams as HTML with LLM-powered generation",
         version="0.1.0",
     )
+
+    # Get the directory where this module is located
+    module_dir = Path(__file__).parent
+
+    # Mount static files (JavaScript, CSS)
+    app.mount("/static", StaticFiles(directory=str(module_dir / "static")), name="static")
+
+    # Set up Jinja2 templates
+    templates = Jinja2Templates(directory=str(module_dir / "templates"))
+
+    @app.get("/", response_class=HTMLResponse)
+    async def index(request: Request, thread_id: str) -> HTMLResponse:  # type: ignore[reportUnusedFunction]  # noqa: E501
+        """Serve the main agent interface.
+
+        Args:
+            request: FastAPI request object
+            thread_id: Thread ID to display
+
+        Returns:
+            HTML response with the chat interface
+        """
+        return templates.TemplateResponse(
+            "index.html", {"request": request, "thread_id": thread_id}
+        )
 
     @app.get("/health")
     async def health() -> dict[str, str]:  # type: ignore[reportUnusedFunction]
@@ -88,9 +116,7 @@ def create_app() -> FastAPI:
             agent_llm_config = VertexAIConfig(
                 project=os.getenv("GCP_PROJECT", ""),
                 location=os.getenv("GCP_LOCATION", "us-central1"),
-                model_name=os.getenv(
-                    "AGENT_MODEL", os.getenv("MODEL_NAME", "gemini-2.5-flash")
-                ),
+                model_name=os.getenv("AGENT_MODEL", os.getenv("MODEL_NAME", "gemini-2.5-flash")),
             )
 
             # LLM config for HTML rendering (use fast/cheap model)
@@ -98,9 +124,7 @@ def create_app() -> FastAPI:
             render_llm_config = VertexAIConfig(
                 project=os.getenv("GCP_PROJECT", ""),
                 location=os.getenv("GCP_LOCATION", "us-central1"),
-                model_name=os.getenv(
-                    "RENDER_MODEL", os.getenv("MODEL_NAME", "gemini-2.5-flash")
-                ),
+                model_name=os.getenv("RENDER_MODEL", os.getenv("MODEL_NAME", "gemini-2.5-flash")),
             )
 
             stream_name = f"agent:v0-{request.thread_id}"

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Agent - Thread {{ thread_id }}</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        #content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+        #chat-input {
+            border-top: 1px solid #ccc;
+            padding: 20px;
+            background: #f5f5f5;
+            display: flex;
+            gap: 10px;
+        }
+        #message-input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            font-family: inherit;
+        }
+        #send-button {
+            padding: 10px 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        #send-button:hover:not(:disabled) {
+            background: #0056b3;
+        }
+        #send-button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .loading {
+            opacity: 0.6;
+        }
+    </style>
+</head>
+<body>
+    <div id="content">Loading...</div>
+
+    <div id="chat-input">
+        <input
+            id="message-input"
+            type="text"
+            placeholder="Type your message..."
+            autofocus
+        />
+        <button id="send-button">Send</button>
+    </div>
+
+    <script>
+        // Pass thread_id from template to JavaScript
+        window.THREAD_ID = "{{ thread_id }}";
+    </script>
+    <script src="/static/app.js"></script>
+</body>
+</html>
