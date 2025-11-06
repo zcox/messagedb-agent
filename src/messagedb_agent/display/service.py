@@ -145,19 +145,36 @@ def create_app() -> FastAPI:
                 # Use stdlib queue (not asyncio.Queue) since subscriber runs in thread
                 event_queue: queue.Queue[dict[str, Any]] = queue.Queue()
 
-                # Step 1: Initialize store client and set subscriber start position
-                # Always start from position 0 to catch all new events in the category
-                # The subscriber reads by global_position across all streams in the category,
-                # and we filter by stream_name in the handler to get only our thread's events
+                # Step 1: Initialize store client and get current global position
+                # We need to know the current max global_position across the entire category
+                # so the subscriber only sees NEW events written after this point
                 store_client = MessageDBClient(db_config)
                 store_client.__enter__()
 
-                start_position = 0
+                # Get all messages in the category to find the max global_position
+                # This tells us where to start the subscriber from
+                from messagedb_agent.store.category import get_category_messages
+
+                category = stream_name.split(":")[0]
+                existing_messages = get_category_messages(
+                    client=store_client,
+                    category=category,
+                    position=0,
+                    batch_size=1000,  # Get recent messages to find max position
+                )
+
+                # Start from max global_position + 1, or 0 if no messages exist
+                start_position = (
+                    max(msg.global_position for msg in existing_messages) + 1
+                    if existing_messages
+                    else 0
+                )
 
                 logger.info(
-                    "Subscriber will start from position 0",
+                    "Subscriber starting position determined",
                     stream_name=stream_name,
                     start_position=start_position,
+                    existing_message_count=len(existing_messages),
                 )
 
                 # Step 2: Handle user message (if provided)
@@ -178,9 +195,6 @@ def create_app() -> FastAPI:
                     )
 
                 # Step 3: Start subscriber to stream events in real-time
-                # Extract category from stream name (agent:v0-{thread_id} -> agent)
-                category = stream_name.split(":")[0]
-
                 # Create sync handler that puts events in thread-safe queue
                 def event_handler(message: Any) -> None:
                     """Handle incoming events from subscriber."""
