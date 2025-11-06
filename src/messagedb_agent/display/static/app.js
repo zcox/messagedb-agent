@@ -37,6 +37,43 @@ function hideProgress() {
 }
 
 /**
+ * Display a real-time agent event in the event log
+ * @param {object} event - Agent event from Message DB
+ */
+function displayAgentEvent(event) {
+    const progressDiv = document.getElementById('progress-indicator');
+    if (!progressDiv) return;
+
+    progressDiv.style.display = 'block';
+
+    // Format event for display
+    const eventType = event.type || 'Unknown';
+    const timestamp = new Date(event.time).toLocaleTimeString();
+
+    // Create a summary message based on event type
+    let message = `${timestamp} - ${eventType}`;
+    let details = null;
+
+    // Customize display based on event type
+    if (eventType === 'UserMessageAdded') {
+        message = `${timestamp} - User message: ${event.data.message?.substring(0, 50) || ''}...`;
+    } else if (eventType === 'LLMResponseReceived') {
+        const text = event.data.text || event.data.content || '';
+        message = `${timestamp} - LLM response (${text.length} chars)`;
+        details = { tool_calls: event.data.tool_calls?.length || 0 };
+    } else if (eventType === 'ToolExecutionRequested') {
+        message = `${timestamp} - Calling tool: ${event.data.name || 'unknown'}`;
+        details = event.data.arguments || {};
+    } else if (eventType === 'ToolExecutionCompleted') {
+        message = `${timestamp} - Tool result: ${event.data.name || 'unknown'}`;
+    } else if (eventType.includes('Error')) {
+        message = `${timestamp} - ⚠️ ${eventType}`;
+    }
+
+    updateProgress(message, details);
+}
+
+/**
  * Refresh the display using Server-Sent Events for progress updates
  * @param {string|null} userMessage - Optional user message to send
  */
@@ -98,8 +135,11 @@ async function refresh(userMessage = null) {
 
                 // Handle different event types
                 if (eventType === 'message' && data) {
-                    // Progress update
+                    // Progress update (legacy)
                     updateProgress(data.message, data.details);
+                } else if (eventType === 'agent_event' && data) {
+                    // Real-time agent event from Message DB subscriber
+                    displayAgentEvent(data);
                 } else if (eventType === 'result' && data) {
                     // Final result
                     currentHTML = data.html;

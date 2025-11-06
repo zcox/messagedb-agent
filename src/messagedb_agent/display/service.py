@@ -4,6 +4,8 @@ This module provides the main FastAPI application with the /render endpoint
 that processes user messages and renders event streams as HTML.
 """
 
+import asyncio
+import json
 import os
 from collections.abc import AsyncIterator
 from datetime import UTC
@@ -23,7 +25,14 @@ from messagedb_agent.display.models import RenderRequest, RenderResponse
 from messagedb_agent.display.progress import ProgressEvent, ProgressStage
 from messagedb_agent.display.renderer import render_html
 from messagedb_agent.projections.display_prefs import project_display_prefs
-from messagedb_agent.store import MessageDBClient, MessageDBConfig, read_stream, write_message
+from messagedb_agent.store import (
+    MessageDBClient,
+    MessageDBConfig,
+    get_last_stream_message,
+    read_stream,
+    write_message,
+)
+from messagedb_agent.subscriber import Subscriber
 
 # Load environment variables from .env file
 load_dotenv()
@@ -78,23 +87,34 @@ def create_app() -> FastAPI:
 
     @app.post("/render-stream")
     async def render_stream(request: RenderRequest) -> StreamingResponse:  # type: ignore[reportUnusedFunction]  # noqa: E501
-        """Render agent events to HTML with streaming progress updates.
+        """Render agent events to HTML with real-time event streaming.
 
-        This endpoint streams Server-Sent Events (SSE) to provide real-time progress
-        updates during the rendering process, then sends the final HTML result.
+        This endpoint streams Server-Sent Events (SSE) to provide real-time visibility
+        into agent processing by streaming actual Message DB events as they're written,
+        then sends the final HTML result.
+
+        The implementation:
+        1. Reads current stream position
+        2. Optionally writes user message and starts subscriber
+        3. Subscriber forwards new events to SSE stream in real-time
+        4. Runs agent processing (which writes events that subscriber sees)
+        5. Stops subscriber and renders final HTML
 
         Args:
             request: Render request with thread_id, optional user_message, and previous_html
 
         Returns:
-            StreamingResponse with SSE progress events followed by final result
+            StreamingResponse with SSE events followed by final result
 
         Raises:
             HTTPException: If rendering fails
         """
 
         async def event_stream() -> AsyncIterator[str]:
-            """Generate SSE progress events and final result."""
+            """Generate SSE events from Message DB subscriber and final result."""
+            subscriber: Subscriber | None = None
+            store_client: MessageDBClient | None = None
+
             try:
                 # Load configuration from environment
                 db_config = MessageDBConfig(
@@ -126,80 +146,128 @@ def create_app() -> FastAPI:
                 stream_name = f"agent:v0-{request.thread_id}"
                 display_prefs_stream = f"display-prefs:{request.thread_id}"
 
-                # Step 1: Handle user message (if provided)
+                # Create queue for subscriber events
+                event_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+
+                # Step 1: Get current stream position before starting agent
+                store_client = MessageDBClient(db_config)
+                store_client.__enter__()
+
+                last_message = get_last_stream_message(store_client, stream_name)
+                start_position = last_message.global_position + 1 if last_message else 0
+
+                # Step 2: Handle user message (if provided)
                 if request.user_message:
-                    yield ProgressEvent(
-                        stage=ProgressStage.WRITING_USER_MESSAGE,
-                        message="Writing user message to event stream",
-                    ).to_sse()
+                    from datetime import datetime
 
-                    with MessageDBClient(db_config) as store_client:
-                        from datetime import datetime
+                    event_data: dict[str, Any] = {
+                        "message": request.user_message,
+                        "timestamp": datetime.now(UTC).isoformat(),
+                    }
 
-                        event_data: dict[str, Any] = {
-                            "message": request.user_message,
-                            "timestamp": datetime.now(UTC).isoformat(),
-                        }
-
-                        write_message(
-                            client=store_client,
-                            stream_name=stream_name,
-                            message_type="UserMessageAdded",
-                            data=event_data,
-                            metadata={},
-                        )
-
-                    yield ProgressEvent(
-                        stage=ProgressStage.AGENT_PROCESSING,
-                        message="Processing message with agent (this may take a while)",
-                    ).to_sse()
-
-                    # Run agent processing loop
-                    await run_agent_step(
-                        thread_id=request.thread_id,
-                        db_config=db_config,
-                        llm_config=agent_llm_config,
-                        auto_approve_tools=True,
+                    write_message(
+                        client=store_client,
+                        stream_name=stream_name,
+                        message_type="UserMessageAdded",
+                        data=event_data,
+                        metadata={},
                     )
 
-                # Step 2: Read all events from stream
-                yield ProgressEvent(
-                    stage=ProgressStage.READING_EVENTS,
-                    message="Reading events from stream",
-                ).to_sse()
+                # Step 3: Start subscriber to stream events in real-time
+                # Extract category from stream name (agent:v0-{thread_id} -> agent)
+                category = stream_name.split(":")[0]
 
-                with MessageDBClient(db_config) as store_client:
-                    events = read_stream(store_client, stream_name)
+                # Create async handler that puts events in queue
+                async def event_handler(message: Any) -> None:
+                    """Handle incoming events from subscriber."""
+                    # Only forward events for our specific thread
+                    if message.stream_name == stream_name:
+                        event_dict = {
+                            "type": message.type,
+                            "data": message.data,
+                            "metadata": message.metadata,
+                            "position": message.position,
+                            "global_position": message.global_position,
+                            "time": message.time.isoformat(),
+                        }
+                        await event_queue.put(event_dict)
 
-                    yield ProgressEvent(
-                        stage=ProgressStage.READING_EVENTS,
-                        message=f"Read {len(events)} events from stream",
-                        details={"event_count": len(events)},
-                    ).to_sse()
+                # Create subscriber (starts from our saved position)
+                subscriber = Subscriber(
+                    category=category,
+                    handler=event_handler,
+                    store_client=store_client,
+                    poll_interval_ms=50,  # Poll frequently for responsiveness
+                    batch_size=100,
+                )
+                subscriber.position = start_position
 
-                    # Step 3: Read and project display preferences
-                    yield ProgressEvent(
-                        stage=ProgressStage.READING_PREFERENCES,
-                        message="Reading display preferences",
-                    ).to_sse()
+                # Start subscriber in background thread (not task, since start() blocks)
+                subscriber_task = asyncio.create_task(
+                    asyncio.to_thread(subscriber.start)
+                )
 
-                    display_prefs_events = read_stream(store_client, display_prefs_stream)
+                # Step 4: Run agent processing (if user message provided)
+                agent_task: asyncio.Task[None] | None = None
+                if request.user_message:
+                    agent_task = asyncio.create_task(
+                        run_agent_step(
+                            thread_id=request.thread_id,
+                            db_config=db_config,
+                            llm_config=agent_llm_config,
+                            auto_approve_tools=True,
+                        )
+                    )
+
+                # Step 5: Stream events from queue to SSE
+                # If no agent task, just read current events and render
+                if agent_task is not None:
+                    while not agent_task.done():
+                        try:
+                            # Wait for event with short timeout
+                            event = await asyncio.wait_for(event_queue.get(), timeout=0.1)
+
+                            # Send event as SSE
+                            yield f"event: agent_event\ndata: {json.dumps(event)}\n\n"
+
+                        except TimeoutError:
+                            # No events yet, keep waiting
+                            continue
+
+                    # Drain any remaining events from queue
+                    while not event_queue.empty():
+                        event = event_queue.get_nowait()
+                        yield f"event: agent_event\ndata: {json.dumps(event)}\n\n"
+
+                    # Wait for agent task to complete (should be done)
+                    await agent_task
+
+                # Step 6: Stop subscriber
+                if subscriber:
+                    subscriber.stop()
+                    # Give subscriber time to stop gracefully
+                    try:
+                        await asyncio.wait_for(subscriber_task, timeout=1.0)
+                    except TimeoutError:
+                        logger.warning("Subscriber did not stop gracefully")
+
+                # Step 7: Read all events for HTML rendering
+                events = read_stream(store_client, stream_name)
+
+                # Step 8: Read and project display preferences
+                display_prefs_events = read_stream(store_client, display_prefs_stream)
 
                 # Convert events to dicts for projection
                 display_prefs_dicts = [
-                    {
-                        "type": event.type,
-                        "data": event.data,
-                    }
-                    for event in display_prefs_events
+                    {"type": event.type, "data": event.data} for event in display_prefs_events
                 ]
 
                 current_prefs = project_display_prefs(display_prefs_dicts)
 
-                # Step 4: Render HTML
+                # Step 9: Render HTML
                 yield ProgressEvent(
                     stage=ProgressStage.RENDERING_HTML,
-                    message="Generating HTML with LLM (this may take a while)",
+                    message="Generating HTML display",
                 ).to_sse()
 
                 html = await render_html(
@@ -209,9 +277,7 @@ def create_app() -> FastAPI:
                     previous_html=request.previous_html,
                 )
 
-                # Send completion event with final result
-                import json
-
+                # Step 10: Send final result
                 result = RenderResponse(html=html, display_prefs=current_prefs)
                 yield ProgressEvent(
                     stage=ProgressStage.COMPLETE,
@@ -219,15 +285,22 @@ def create_app() -> FastAPI:
                     details={"html_length": len(html)},
                 ).to_sse()
 
-                # Send final result as JSON in a special event
                 yield f"event: result\ndata: {json.dumps(result.model_dump())}\n\n"
 
             except Exception as e:
-                import json
-
                 logger.error("Render stream failed", error=str(e), error_type=type(e).__name__)
                 # Send error event
                 yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
+
+            finally:
+                # Cleanup: stop subscriber and close store client
+                if subscriber:
+                    subscriber.stop()
+                if store_client:
+                    try:
+                        store_client.__exit__(None, None, None)  # type: ignore[reportUnknownMemberType]  # noqa: E501
+                    except Exception:
+                        pass  # Ignore cleanup errors
 
         return StreamingResponse(
             event_stream(),
