@@ -7,7 +7,6 @@ that processes user messages and renders event streams as HTML.
 import asyncio
 import json
 import os
-import queue
 from collections.abc import AsyncIterator
 from datetime import UTC
 from pathlib import Path
@@ -27,7 +26,6 @@ from messagedb_agent.display.progress import ProgressEvent, ProgressStage
 from messagedb_agent.display.renderer import render_html
 from messagedb_agent.projections.display_prefs import project_display_prefs
 from messagedb_agent.store import MessageDBClient, MessageDBConfig, read_stream, write_message
-from messagedb_agent.subscriber import Subscriber
 
 # Load environment variables from .env file
 load_dotenv()
@@ -85,15 +83,15 @@ def create_app() -> FastAPI:
         """Render agent events to HTML with real-time event streaming.
 
         This endpoint streams Server-Sent Events (SSE) to provide real-time visibility
-        into agent processing by streaming actual Message DB events as they're written,
+        into agent processing by polling the stream and forwarding new events as they appear,
         then sends the final HTML result.
 
         The implementation:
-        1. Reads current stream position
-        2. Optionally writes user message and starts subscriber
-        3. Subscriber forwards new events to SSE stream in real-time
-        4. Runs agent processing (which writes events that subscriber sees)
-        5. Stops subscriber and renders final HTML
+        1. Reads current stream length
+        2. Optionally writes user message
+        3. Starts agent processing in background task
+        4. Polls stream periodically, streaming new events via SSE
+        5. Renders final HTML and sends result
 
         Args:
             request: Render request with thread_id, optional user_message, and previous_html
@@ -106,8 +104,7 @@ def create_app() -> FastAPI:
         """
 
         async def event_stream() -> AsyncIterator[str]:
-            """Generate SSE events from Message DB subscriber and final result."""
-            subscriber: Subscriber | None = None
+            """Generate SSE events by polling the stream and final result."""
             store_client: MessageDBClient | None = None
 
             try:
@@ -141,40 +138,18 @@ def create_app() -> FastAPI:
                 stream_name = f"agent:v0-{request.thread_id}"
                 display_prefs_stream = f"display-prefs:{request.thread_id}"
 
-                # Create thread-safe queue for subscriber events
-                # Use stdlib queue (not asyncio.Queue) since subscriber runs in thread
-                event_queue: queue.Queue[dict[str, Any]] = queue.Queue()
-
-                # Step 1: Initialize store client and get current global position
-                # We need to know the current max global_position across the entire category
-                # so the subscriber only sees NEW events written after this point
+                # Step 1: Initialize store client
                 store_client = MessageDBClient(db_config)
                 store_client.__enter__()
 
-                # Get all messages in the category to find the max global_position
-                # This tells us where to start the subscriber from
-                from messagedb_agent.store.category import get_category_messages
-
-                category = stream_name.split(":")[0]
-                existing_messages = get_category_messages(
-                    client=store_client,
-                    category=category,
-                    position=0,
-                    batch_size=1000,  # Get recent messages to find max position
-                )
-
-                # Start from max global_position + 1, or 0 if no messages exist
-                start_position = (
-                    max(msg.global_position for msg in existing_messages) + 1
-                    if existing_messages
-                    else 0
-                )
+                # Get current stream length to track new events
+                existing_events = read_stream(store_client, stream_name)
+                last_seen_position = len(existing_events) - 1 if existing_events else -1
 
                 logger.info(
-                    "Subscriber starting position determined",
+                    "Starting event stream",
                     stream_name=stream_name,
-                    start_position=start_position,
-                    existing_message_count=len(existing_messages),
+                    last_seen_position=last_seen_position,
                 )
 
                 # Step 2: Handle user message (if provided)
@@ -194,48 +169,7 @@ def create_app() -> FastAPI:
                         metadata={},
                     )
 
-                # Step 3: Start subscriber to stream events in real-time
-                # Create sync handler that puts events in thread-safe queue
-                def event_handler(message: Any) -> None:
-                    """Handle incoming events from subscriber."""
-                    logger.debug(
-                        "Subscriber received event",
-                        event_type=message.type,
-                        stream_name=message.stream_name,
-                        expected_stream=stream_name,
-                        global_position=message.global_position,
-                    )
-                    # Only forward events for our specific thread
-                    if message.stream_name == stream_name:
-                        event_dict = {
-                            "type": message.type,
-                            "data": message.data,
-                            "metadata": message.metadata,
-                            "position": message.position,
-                            "global_position": message.global_position,
-                            "time": message.time.isoformat(),
-                        }
-                        event_queue.put(event_dict)
-                        logger.info(
-                            "Event queued for SSE",
-                            event_type=message.type,
-                            queue_size=event_queue.qsize(),
-                        )
-
-                # Create subscriber (starts from our saved position)
-                subscriber = Subscriber(
-                    category=category,
-                    handler=event_handler,
-                    store_client=store_client,
-                    poll_interval_ms=50,  # Poll frequently for responsiveness
-                    batch_size=100,
-                )
-                subscriber.position = start_position
-
-                # Start subscriber in background thread (not task, since start() blocks)
-                subscriber_task = asyncio.create_task(asyncio.to_thread(subscriber.start))
-
-                # Step 4: Run agent processing (if user message provided)
+                # Step 3: Run agent processing (if user message provided)
                 agent_task: asyncio.Task[None] | None = None
                 if request.user_message:
                     agent_task = asyncio.create_task(
@@ -247,63 +181,79 @@ def create_app() -> FastAPI:
                         )
                     )
 
-                # Step 5: Stream events from queue to SSE
+                # Step 4: Poll stream and stream new events via SSE
                 # If no agent task, just read current events and render
                 if agent_task is not None:
-                    logger.info("Starting to stream events to SSE client")
+                    logger.info("Starting to poll and stream events to SSE client")
                     events_sent = 0
+
                     while not agent_task.done():
-                        try:
-                            # Poll queue with timeout (non-blocking for async compatibility)
-                            event = event_queue.get(block=True, timeout=0.1)
+                        # Poll stream for new events
+                        current_events = read_stream(store_client, stream_name)
 
-                            # Send event as SSE
-                            yield f"event: agent_event\ndata: {json.dumps(event)}\n\n"
+                        # Check for new events since last poll
+                        if len(current_events) > last_seen_position + 1:
+                            # Stream new events
+                            new_events = current_events[last_seen_position + 1 :]
+                            for event in new_events:
+                                event_dict = {
+                                    "type": event.type,
+                                    "data": event.data,
+                                    "metadata": event.metadata,
+                                    "position": event.position,
+                                    "global_position": event.global_position,
+                                    "time": event.time.isoformat(),
+                                }
+
+                                yield f"event: agent_event\ndata: {json.dumps(event_dict)}\n\n"
+                                events_sent += 1
+                                logger.info(
+                                    "Sent agent_event to client",
+                                    event_type=event.type,
+                                    position=event.position,
+                                    events_sent=events_sent,
+                                )
+
+                            # Update last seen position
+                            last_seen_position = len(current_events) - 1
+
+                        # Sleep before next poll
+                        await asyncio.sleep(0.1)
+
+                    logger.info("Agent task complete, checking for final events")
+
+                    # One final poll to catch any events written right at the end
+                    final_events = read_stream(store_client, stream_name)
+                    if len(final_events) > last_seen_position + 1:
+                        new_events = final_events[last_seen_position + 1 :]
+                        for event in new_events:
+                            event_dict = {
+                                "type": event.type,
+                                "data": event.data,
+                                "metadata": event.metadata,
+                                "position": event.position,
+                                "global_position": event.global_position,
+                                "time": event.time.isoformat(),
+                            }
+
+                            yield f"event: agent_event\ndata: {json.dumps(event_dict)}\n\n"
                             events_sent += 1
                             logger.info(
-                                "Sent agent_event to client",
-                                event_type=event["type"],
+                                "Sent final agent_event to client",
+                                event_type=event.type,
+                                position=event.position,
                                 events_sent=events_sent,
                             )
-
-                        except queue.Empty:
-                            # No events yet, yield control to event loop
-                            await asyncio.sleep(0.01)
-                            continue
-
-                    # Drain any remaining events from queue
-                    logger.info("Agent task complete, draining remaining events")
-                    while not event_queue.empty():
-                        try:
-                            event = event_queue.get_nowait()
-                            yield f"event: agent_event\ndata: {json.dumps(event)}\n\n"
-                            events_sent += 1
-                            logger.info(
-                                "Sent queued agent_event to client",
-                                event_type=event["type"],
-                                events_sent=events_sent,
-                            )
-                        except queue.Empty:
-                            break
 
                     logger.info("Total agent events sent", total_events=events_sent)
 
                     # Wait for agent task to complete (should be done)
                     await agent_task
 
-                # Step 6: Stop subscriber
-                if subscriber:
-                    subscriber.stop()
-                    # Give subscriber time to stop gracefully
-                    try:
-                        await asyncio.wait_for(subscriber_task, timeout=1.0)
-                    except TimeoutError:
-                        logger.warning("Subscriber did not stop gracefully")
-
-                # Step 7: Read all events for HTML rendering
+                # Step 5: Read all events for HTML rendering
                 events = read_stream(store_client, stream_name)
 
-                # Step 8: Read and project display preferences
+                # Step 6: Read and project display preferences
                 display_prefs_events = read_stream(store_client, display_prefs_stream)
 
                 # Convert events to dicts for projection
@@ -313,7 +263,7 @@ def create_app() -> FastAPI:
 
                 current_prefs = project_display_prefs(display_prefs_dicts)
 
-                # Step 9: Render HTML
+                # Step 7: Render HTML
                 yield ProgressEvent(
                     stage=ProgressStage.RENDERING_HTML,
                     message="Generating HTML display",
@@ -326,7 +276,7 @@ def create_app() -> FastAPI:
                     previous_html=request.previous_html,
                 )
 
-                # Step 10: Send final result
+                # Step 8: Send final result
                 result = RenderResponse(html=html, display_prefs=current_prefs)
                 yield ProgressEvent(
                     stage=ProgressStage.COMPLETE,
@@ -342,9 +292,7 @@ def create_app() -> FastAPI:
                 yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
 
             finally:
-                # Cleanup: stop subscriber and close store client
-                if subscriber:
-                    subscriber.stop()
+                # Cleanup: close store client
                 if store_client:
                     try:
                         store_client.__exit__(None, None, None)  # type: ignore[reportUnknownMemberType]  # noqa: E501
