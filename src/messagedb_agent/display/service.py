@@ -175,7 +175,7 @@ def create_app() -> FastAPI:
                     agent_task = asyncio.create_task(
                         run_agent_step(
                             thread_id=request.thread_id,
-                            db_config=db_config,
+                            store_client=store_client,
                             llm_config=agent_llm_config,
                             auto_approve_tools=True,
                         )
@@ -372,12 +372,13 @@ def create_app() -> FastAPI:
             stream_name = f"agent:v0-{request.thread_id}"
             display_prefs_stream = f"display-prefs:{request.thread_id}"
 
-            # Step 1: Handle user message (if provided)
-            if request.user_message:
-                log.info("Processing user message")
+            # Create store client for entire operation
+            with MessageDBClient(db_config) as store_client:
+                # Step 1: Handle user message (if provided)
+                if request.user_message:
+                    log.info("Processing user message")
 
-                # Write UserMessageAdded event
-                with MessageDBClient(db_config) as store_client:
+                    # Write UserMessageAdded event
                     from datetime import datetime
 
                     event_data: dict[str, Any] = {
@@ -393,20 +394,19 @@ def create_app() -> FastAPI:
                         metadata={},
                     )
 
-                log.info("User message written, starting agent processing")
+                    log.info("User message written, starting agent processing")
 
-                # Run agent processing loop
-                await run_agent_step(
-                    thread_id=request.thread_id,
-                    db_config=db_config,
-                    llm_config=agent_llm_config,
-                    auto_approve_tools=True,
-                )
+                    # Run agent processing loop
+                    await run_agent_step(
+                        thread_id=request.thread_id,
+                        store_client=store_client,
+                        llm_config=agent_llm_config,
+                        auto_approve_tools=True,
+                    )
 
-                log.info("Agent processing complete")
+                    log.info("Agent processing complete")
 
-            # Step 2: Read all events from stream
-            with MessageDBClient(db_config) as store_client:
+                # Step 2: Read all events from stream
                 events = read_stream(store_client, stream_name)
                 log.info("Read events from stream", event_count=len(events))
 
@@ -417,29 +417,29 @@ def create_app() -> FastAPI:
                     display_prefs_event_count=len(display_prefs_events),
                 )
 
-            # Convert events to dicts for projection
-            display_prefs_dicts = [
-                {
-                    "type": event.type,
-                    "data": event.data,
-                }
-                for event in display_prefs_events
-            ]
+                # Convert events to dicts for projection
+                display_prefs_dicts = [
+                    {
+                        "type": event.type,
+                        "data": event.data,
+                    }
+                    for event in display_prefs_events
+                ]
 
-            current_prefs = project_display_prefs(display_prefs_dicts)
-            log.info("Projected display preferences", preferences=current_prefs)
+                current_prefs = project_display_prefs(display_prefs_dicts)
+                log.info("Projected display preferences", preferences=current_prefs)
 
-            # Step 4: Render HTML
-            html = await render_html(
-                events=events,
-                display_prefs=current_prefs,
-                llm_config=render_llm_config,
-                previous_html=request.previous_html,
-            )
+                # Step 4: Render HTML
+                html = await render_html(
+                    events=events,
+                    display_prefs=current_prefs,
+                    llm_config=render_llm_config,
+                    previous_html=request.previous_html,
+                )
 
-            log.info("Render complete", html_length=len(html))
+                log.info("Render complete", html_length=len(html))
 
-            return RenderResponse(html=html, display_prefs=current_prefs)
+                return RenderResponse(html=html, display_prefs=current_prefs)
 
         except Exception as e:
             log.error("Render request failed", error=str(e), error_type=type(e).__name__)
