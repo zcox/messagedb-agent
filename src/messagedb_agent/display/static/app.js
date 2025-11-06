@@ -143,11 +143,20 @@ async function refresh(userMessage = null) {
                 } else if (eventType === 'result' && data) {
                     // Final result
                     currentHTML = data.html;
-                    document.getElementById('content').innerHTML = data.html;
+
+                    // Create a container for the rendered HTML if it doesn't exist
+                    let container = document.getElementById('rendered-content');
+                    if (!container) {
+                        container = document.createElement('div');
+                        container.id = 'rendered-content';
+                        // Insert at the beginning of body
+                        document.body.insertBefore(container, document.body.firstChild);
+                    }
+
+                    container.innerHTML = data.html;
 
                     // Scroll to bottom
-                    const content = document.getElementById('content');
-                    content.scrollTop = content.scrollHeight;
+                    container.scrollTop = container.scrollHeight;
 
                     hideProgress();
                 } else if (eventType === 'error' && data) {
@@ -159,7 +168,17 @@ async function refresh(userMessage = null) {
 
     } catch (error) {
         console.error('Refresh failed:', error);
-        document.getElementById('content').innerHTML =
+
+        // Create or get the container for error display
+        let container = document.getElementById('rendered-content');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'rendered-content';
+            // Insert at the beginning of body
+            document.body.insertBefore(container, document.body.firstChild);
+        }
+
+        container.innerHTML =
             `<div style="color: red; padding: 20px;">Error: ${error.message}</div>`;
         hideProgress();
     } finally {
@@ -192,17 +211,22 @@ async function sendMessage() {
 function updateUIState() {
     const input = document.getElementById('message-input');
     const button = document.getElementById('send-button');
-    const content = document.getElementById('content');
+    const container = document.getElementById('rendered-content');
 
     input.disabled = isProcessing;
     button.disabled = isProcessing;
     button.textContent = isProcessing ? 'Processing...' : 'Send';
 
-    if (isProcessing) {
-        content.classList.add('loading');
-    } else {
-        content.classList.remove('loading');
-        // Return focus to input field after processing completes
+    if (container) {
+        if (isProcessing) {
+            container.classList.add('loading');
+        } else {
+            container.classList.remove('loading');
+        }
+    }
+
+    // Return focus to input field after processing completes
+    if (!isProcessing) {
         input.focus();
     }
 }
