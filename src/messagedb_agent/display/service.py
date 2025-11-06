@@ -26,13 +26,7 @@ from messagedb_agent.display.models import RenderRequest, RenderResponse
 from messagedb_agent.display.progress import ProgressEvent, ProgressStage
 from messagedb_agent.display.renderer import render_html
 from messagedb_agent.projections.display_prefs import project_display_prefs
-from messagedb_agent.store import (
-    MessageDBClient,
-    MessageDBConfig,
-    get_last_stream_message,
-    read_stream,
-    write_message,
-)
+from messagedb_agent.store import MessageDBClient, MessageDBConfig, read_stream, write_message
 from messagedb_agent.subscriber import Subscriber
 
 # Load environment variables from .env file
@@ -151,18 +145,19 @@ def create_app() -> FastAPI:
                 # Use stdlib queue (not asyncio.Queue) since subscriber runs in thread
                 event_queue: queue.Queue[dict[str, Any]] = queue.Queue()
 
-                # Step 1: Get current stream position before starting agent
+                # Step 1: Initialize store client and set subscriber start position
+                # Always start from position 0 to catch all new events in the category
+                # The subscriber reads by global_position across all streams in the category,
+                # and we filter by stream_name in the handler to get only our thread's events
                 store_client = MessageDBClient(db_config)
                 store_client.__enter__()
 
-                last_message = get_last_stream_message(store_client, stream_name)
-                start_position = last_message.global_position + 1 if last_message else 0
+                start_position = 0
 
                 logger.info(
-                    "Subscriber starting position",
+                    "Subscriber will start from position 0",
                     stream_name=stream_name,
                     start_position=start_position,
-                    has_existing_events=last_message is not None,
                 )
 
                 # Step 2: Handle user message (if provided)
