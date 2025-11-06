@@ -3,6 +3,9 @@
 This module handles running the agent processing loop in response to user messages.
 """
 
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+
 import structlog
 
 from messagedb_agent.config import VertexAIConfig
@@ -52,16 +55,21 @@ async def run_agent_step(
     # TODO: Register display preference tools when implemented
     # (messagedb-agent-112)
 
-    # Run agent processing loop
-    final_state = process_thread(
-        thread_id=thread_id,
-        stream_name=stream_name,
-        store_client=store_client,
-        llm_client=llm_client,
-        tool_registry=tool_registry,
-        max_iterations=100,
-        auto_approve_tools=auto_approve_tools,
-    )
+    # Run agent processing loop in thread pool to avoid blocking async event loop
+    # This allows the polling loop to run concurrently and see events in real-time
+    loop = asyncio.get_running_loop()
+    with ThreadPoolExecutor() as executor:
+        final_state = await loop.run_in_executor(
+            executor,
+            process_thread,
+            thread_id,
+            stream_name,
+            store_client,
+            llm_client,
+            tool_registry,
+            100,  # max_iterations
+            auto_approve_tools,
+        )
 
     log.info(
         "Agent processing complete",
