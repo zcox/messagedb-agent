@@ -263,14 +263,29 @@ def create_app() -> FastAPI:
 
                 current_prefs = project_display_prefs(display_prefs_dicts)
 
-                # Step 7: Write HTMLRenderingStarted event and render HTML
-                write_message(
+                # Step 7: Write HTMLRenderingStarted event and stream it
+                position = write_message(
                     client=store_client,
                     stream_name=stream_name,
                     message_type=HTML_RENDERING_STARTED,
                     data={"event_count": len(events)},
                     metadata={},
                 )
+
+                # Stream the HTMLRenderingStarted event
+                rendering_started_events = read_stream(store_client, stream_name, position=position)
+                if rendering_started_events:
+                    event = rendering_started_events[0]
+                    event_dict = {
+                        "type": event.type,
+                        "data": event.data,
+                        "metadata": event.metadata,
+                        "position": event.position,
+                        "global_position": event.global_position,
+                        "time": event.time.isoformat(),
+                    }
+                    yield f"event: agent_event\ndata: {json.dumps(event_dict)}\n\n"
+                    logger.info("Sent HTMLRenderingStarted event to client")
 
                 html = await render_html(
                     events=events,
@@ -279,14 +294,31 @@ def create_app() -> FastAPI:
                     previous_html=request.previous_html,
                 )
 
-                # Write HTMLRenderingCompleted event
-                write_message(
+                # Write HTMLRenderingCompleted event and stream it
+                position = write_message(
                     client=store_client,
                     stream_name=stream_name,
                     message_type=HTML_RENDERING_COMPLETED,
                     data={"html_length": len(html)},
                     metadata={},
                 )
+
+                # Stream the HTMLRenderingCompleted event
+                rendering_completed_events = read_stream(
+                    store_client, stream_name, position=position
+                )
+                if rendering_completed_events:
+                    event = rendering_completed_events[0]
+                    event_dict = {
+                        "type": event.type,
+                        "data": event.data,
+                        "metadata": event.metadata,
+                        "position": event.position,
+                        "global_position": event.global_position,
+                        "time": event.time.isoformat(),
+                    }
+                    yield f"event: agent_event\ndata: {json.dumps(event_dict)}\n\n"
+                    logger.info("Sent HTMLRenderingCompleted event to client")
 
                 # Step 8: Send final result
                 result = RenderResponse(html=html, display_prefs=current_prefs)
