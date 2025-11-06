@@ -115,7 +115,7 @@ def execute_llm_step(
     # Step 3: Use provided system prompt or default
     prompt = system_prompt if system_prompt is not None else DEFAULT_SYSTEM_PROMPT
 
-    # Step 4: Write LLMCallStarted event
+    # Step 4: Write LLMCallStarted event and ensure it's committed immediately
     try:
         write_message(
             client=store_client,
@@ -128,7 +128,12 @@ def execute_llm_step(
             },
             metadata={},
         )
-        log.info("LLMCallStarted event written")
+        # Explicitly commit to ensure event is visible to other connections immediately
+        # write_message already commits, but we ensure the connection state is clean
+        conn = store_client.get_connection()
+        if not conn.autocommit:
+            conn.commit()
+        log.info("LLMCallStarted event written and committed")
     except Exception as e:
         log.error("Failed to write LLMCallStarted event", error=str(e))
         raise LLMStepError(f"Failed to write LLMCallStarted event: {e}") from e

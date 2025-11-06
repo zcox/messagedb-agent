@@ -323,7 +323,8 @@ class TestExecuteToolStep:
         # Should fail
         assert success is False
 
-        # Should write 3 events: Requested, Started, Failed (tool not found happens during execution)
+        # Should write 3 events: Requested, Started, Failed
+        # (tool not found happens during execution)
         assert mock_write.call_count == 3
 
         # Verify ToolExecutionFailed was written

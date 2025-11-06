@@ -301,7 +301,11 @@ def execute_tool_step(
                 },
                 metadata={"tool_id": tool_id, "tool_call_id": tool_id, "tool_index": i},
             )
-            log_tool.info("ToolExecutionStarted event written")
+            # Explicitly commit to ensure event is visible to other connections immediately
+            conn = store_client.get_connection()
+            if not conn.autocommit:
+                conn.commit()
+            log_tool.info("ToolExecutionStarted event written and committed")
         except Exception as e:
             log_tool.error("Failed to write ToolExecutionStarted event", error=str(e))
             raise ToolStepError(f"Failed to write started event for {tool_name}: {e}") from e
