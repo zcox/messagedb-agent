@@ -215,9 +215,13 @@ document.getElementById('message-input').addEventListener('keypress', (e) => {
         sendMessage();
     }
 });
-document.getElementById('new-thread-button').addEventListener('click', () => {
-    window.location.href = '/';
-});
+
+const newThreadButton = document.getElementById('new-thread-button');
+if (newThreadButton) {
+    newThreadButton.addEventListener('click', () => {
+        window.location.href = '/';
+    });
+}
 
 // Initial load only - no auto-refresh
 refresh();
