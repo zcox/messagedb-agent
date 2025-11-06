@@ -7,6 +7,7 @@ that processes user messages and renders event streams as HTML.
 import asyncio
 import json
 import os
+import queue
 from collections.abc import AsyncIterator
 from datetime import UTC
 from pathlib import Path
@@ -146,8 +147,9 @@ def create_app() -> FastAPI:
                 stream_name = f"agent:v0-{request.thread_id}"
                 display_prefs_stream = f"display-prefs:{request.thread_id}"
 
-                # Create queue for subscriber events
-                event_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+                # Create thread-safe queue for subscriber events
+                # Use stdlib queue (not asyncio.Queue) since subscriber runs in thread
+                event_queue: queue.Queue[dict[str, Any]] = queue.Queue()
 
                 # Step 1: Get current stream position before starting agent
                 store_client = MessageDBClient(db_config)
@@ -177,8 +179,8 @@ def create_app() -> FastAPI:
                 # Extract category from stream name (agent:v0-{thread_id} -> agent)
                 category = stream_name.split(":")[0]
 
-                # Create async handler that puts events in queue
-                async def event_handler(message: Any) -> None:
+                # Create sync handler that puts events in thread-safe queue
+                def event_handler(message: Any) -> None:
                     """Handle incoming events from subscriber."""
                     # Only forward events for our specific thread
                     if message.stream_name == stream_name:
@@ -190,7 +192,7 @@ def create_app() -> FastAPI:
                             "global_position": message.global_position,
                             "time": message.time.isoformat(),
                         }
-                        await event_queue.put(event_dict)
+                        event_queue.put(event_dict)
 
                 # Create subscriber (starts from our saved position)
                 subscriber = Subscriber(
@@ -203,9 +205,7 @@ def create_app() -> FastAPI:
                 subscriber.position = start_position
 
                 # Start subscriber in background thread (not task, since start() blocks)
-                subscriber_task = asyncio.create_task(
-                    asyncio.to_thread(subscriber.start)
-                )
+                subscriber_task = asyncio.create_task(asyncio.to_thread(subscriber.start))
 
                 # Step 4: Run agent processing (if user message provided)
                 agent_task: asyncio.Task[None] | None = None
@@ -224,20 +224,24 @@ def create_app() -> FastAPI:
                 if agent_task is not None:
                     while not agent_task.done():
                         try:
-                            # Wait for event with short timeout
-                            event = await asyncio.wait_for(event_queue.get(), timeout=0.1)
+                            # Poll queue with timeout (non-blocking for async compatibility)
+                            event = event_queue.get(block=True, timeout=0.1)
 
                             # Send event as SSE
                             yield f"event: agent_event\ndata: {json.dumps(event)}\n\n"
 
-                        except TimeoutError:
-                            # No events yet, keep waiting
+                        except queue.Empty:
+                            # No events yet, yield control to event loop
+                            await asyncio.sleep(0.01)
                             continue
 
                     # Drain any remaining events from queue
                     while not event_queue.empty():
-                        event = event_queue.get_nowait()
-                        yield f"event: agent_event\ndata: {json.dumps(event)}\n\n"
+                        try:
+                            event = event_queue.get_nowait()
+                            yield f"event: agent_event\ndata: {json.dumps(event)}\n\n"
+                        except queue.Empty:
+                            break
 
                     # Wait for agent task to complete (should be done)
                     await agent_task
