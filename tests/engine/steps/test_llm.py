@@ -7,7 +7,7 @@ from uuid import uuid4
 import pytest
 
 from messagedb_agent.engine.steps.llm import LLMStepError, execute_llm_step
-from messagedb_agent.events.agent import LLM_CALL_FAILED, LLM_RESPONSE_RECEIVED
+from messagedb_agent.events.agent import LLM_CALL_FAILED, LLM_CALL_STARTED, LLM_RESPONSE_RECEIVED
 from messagedb_agent.events.base import BaseEvent
 from messagedb_agent.events.user import USER_MESSAGE_ADDED
 from messagedb_agent.llm import LLMAPIError, LLMResponse, ToolCall
@@ -83,14 +83,23 @@ class TestExecuteLLMStep:
         assert call_kwargs["messages"][0].role == "user"
         assert call_kwargs["system_prompt"] is not None
 
-        # Verify event was written
-        assert mock_write.call_count == 1
-        write_args = mock_write.call_args[1]
-        assert write_args["stream_name"] == stream_name
-        assert write_args["message_type"] == LLM_RESPONSE_RECEIVED
-        assert write_args["data"]["response_text"] == "I'm doing great, thanks!"
-        assert write_args["data"]["model_name"] == "claude-sonnet-4-5"
-        assert write_args["data"]["tool_calls"] == []
+        # Verify both events were written (Started + Response)
+        assert mock_write.call_count == 2
+
+        # Check LLMCallStarted event (first call)
+        started_args = mock_write.call_args_list[0][1]
+        assert started_args["stream_name"] == stream_name
+        assert started_args["message_type"] == LLM_CALL_STARTED
+        assert "message_count" in started_args["data"]
+        assert "tool_count" in started_args["data"]
+
+        # Check LLMResponseReceived event (second call)
+        response_args = mock_write.call_args_list[1][1]
+        assert response_args["stream_name"] == stream_name
+        assert response_args["message_type"] == LLM_RESPONSE_RECEIVED
+        assert response_args["data"]["response_text"] == "I'm doing great, thanks!"
+        assert response_args["data"]["model_name"] == "claude-sonnet-4-5"
+        assert response_args["data"]["tool_calls"] == []
 
     def test_llm_call_with_tool_calls_includes_them_in_event(
         self, sample_events, mock_llm_client, tool_registry, mock_store_client
@@ -236,12 +245,18 @@ class TestExecuteLLMStep:
         # Verify LLM was called 3 times (initial + 2 retries)
         assert mock_llm_client.call.call_count == 3
 
-        # Verify LLMCallFailed event was written
-        assert mock_write.call_count == 1
-        write_args = mock_write.call_args[1]
-        assert write_args["message_type"] == LLM_CALL_FAILED
-        assert "API rate limit exceeded" in write_args["data"]["error_message"]
-        assert write_args["data"]["retry_count"] == 2
+        # Verify both events were written (Started + Failed)
+        assert mock_write.call_count == 2
+
+        # Check LLMCallStarted event (first call)
+        started_args = mock_write.call_args_list[0][1]
+        assert started_args["message_type"] == LLM_CALL_STARTED
+
+        # Check LLMCallFailed event (second call)
+        failed_args = mock_write.call_args_list[1][1]
+        assert failed_args["message_type"] == LLM_CALL_FAILED
+        assert "API rate limit exceeded" in failed_args["data"]["error_message"]
+        assert failed_args["data"]["retry_count"] == 2
 
     def test_llm_succeeds_after_retry(
         self, sample_events, mock_llm_client, tool_registry, mock_store_client
@@ -274,28 +289,34 @@ class TestExecuteLLMStep:
         # Verify LLM was called 3 times
         assert mock_llm_client.call.call_count == 3
 
-        # Verify LLMResponseReceived event was written (not LLMCallFailed)
-        assert mock_write.call_count == 1
-        write_args = mock_write.call_args[1]
-        assert write_args["message_type"] == LLM_RESPONSE_RECEIVED
-        assert write_args["metadata"]["retry_count"] == 2
+        # Verify both events were written (Started + Response)
+        assert mock_write.call_count == 2
+
+        # Check LLMCallStarted event (first call)
+        started_args = mock_write.call_args_list[0][1]
+        assert started_args["message_type"] == LLM_CALL_STARTED
+
+        # Check LLMResponseReceived event (second call)
+        response_args = mock_write.call_args_list[1][1]
+        assert response_args["message_type"] == LLM_RESPONSE_RECEIVED
+        assert response_args["metadata"]["retry_count"] == 2
 
     def test_raises_error_if_success_event_write_fails(
         self, sample_events, mock_llm_client, tool_registry, mock_store_client
     ):
-        """Test that LLMStepError is raised if success event write fails."""
+        """Test that LLMStepError is raised if LLMCallStarted event write fails."""
         stream_name = "agent:v0-test123"
 
         mock_llm_client.call.return_value = LLMResponse(
             text="Response", tool_calls=None, model_name="claude-sonnet-4-5", token_usage={}
         )
 
-        # Mock event write to fail
+        # Mock LLMCallStarted event write to fail
         with patch(
             "messagedb_agent.engine.steps.llm.write_message",
             side_effect=Exception("Database error"),
         ):
-            with pytest.raises(LLMStepError, match="Failed to write success event"):
+            with pytest.raises(LLMStepError, match="Failed to write LLMCallStarted event"):
                 execute_llm_step(
                     events=sample_events,
                     llm_client=mock_llm_client,
@@ -307,18 +328,18 @@ class TestExecuteLLMStep:
     def test_raises_error_if_failure_event_write_fails(
         self, sample_events, mock_llm_client, tool_registry, mock_store_client
     ):
-        """Test that LLMStepError is raised if failure event write fails."""
+        """Test that LLMStepError is raised if LLMCallStarted event write fails."""
         stream_name = "agent:v0-test123"
 
         # Mock LLM to always fail
         mock_llm_client.call.side_effect = LLMAPIError("API error")
 
-        # Mock failure event write to fail
+        # Mock LLMCallStarted event write to fail (first write)
         with patch(
             "messagedb_agent.engine.steps.llm.write_message",
             side_effect=Exception("Database error"),
         ):
-            with pytest.raises(LLMStepError, match="Failed to write failure event"):
+            with pytest.raises(LLMStepError, match="Failed to write LLMCallStarted event"):
                 execute_llm_step(
                     events=sample_events,
                     llm_client=mock_llm_client,

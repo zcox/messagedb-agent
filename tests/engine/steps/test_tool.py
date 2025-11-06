@@ -13,6 +13,7 @@ from messagedb_agent.events.tool import (
     TOOL_EXECUTION_COMPLETED,
     TOOL_EXECUTION_FAILED,
     TOOL_EXECUTION_REQUESTED,
+    TOOL_EXECUTION_STARTED,
 )
 from messagedb_agent.tools import ToolRegistry, register_tool
 
@@ -101,8 +102,8 @@ class TestExecuteToolStep:
         # Should succeed
         assert success is True
 
-        # Should write 2 events: ToolExecutionRequested and ToolExecutionCompleted
-        assert mock_write.call_count == 2
+        # Should write 3 events: Requested, Started, Completed
+        assert mock_write.call_count == 3
 
         # Verify first write is ToolExecutionRequested
         first_call = mock_write.call_args_list[0][1]
@@ -111,12 +112,18 @@ class TestExecuteToolStep:
         assert first_call["data"]["arguments"] == {"city": "San Francisco"}
         assert first_call["metadata"]["tool_id"] == "call_1"
 
-        # Verify second write is ToolExecutionCompleted
+        # Verify second write is ToolExecutionStarted
         second_call = mock_write.call_args_list[1][1]
-        assert second_call["message_type"] == TOOL_EXECUTION_COMPLETED
+        assert second_call["message_type"] == TOOL_EXECUTION_STARTED
         assert second_call["data"]["tool_name"] == "get_weather"
-        assert "Weather in San Francisco" in second_call["data"]["result"]
-        assert second_call["data"]["execution_time_ms"] >= 0
+        assert second_call["data"]["arguments"] == {"city": "San Francisco"}
+
+        # Verify third write is ToolExecutionCompleted
+        third_call = mock_write.call_args_list[2][1]
+        assert third_call["message_type"] == TOOL_EXECUTION_COMPLETED
+        assert third_call["data"]["tool_name"] == "get_weather"
+        assert "Weather in San Francisco" in third_call["data"]["result"]
+        assert third_call["data"]["execution_time_ms"] >= 0
 
     def test_no_tool_calls_returns_success(
         self, sample_events_no_tool_calls, tool_registry, mock_store_client
@@ -162,16 +169,24 @@ class TestExecuteToolStep:
         # Should fail
         assert success is False
 
-        # Should write 2 events: ToolExecutionRequested and ToolExecutionFailed
-        assert mock_write.call_count == 2
+        # Should write 3 events: Requested, Started, Failed
+        assert mock_write.call_count == 3
 
-        # Verify second write is ToolExecutionFailed
+        # Verify first write is ToolExecutionRequested
+        first_call = mock_write.call_args_list[0][1]
+        assert first_call["message_type"] == TOOL_EXECUTION_REQUESTED
+
+        # Verify second write is ToolExecutionStarted
         second_call = mock_write.call_args_list[1][1]
-        assert second_call["message_type"] == TOOL_EXECUTION_FAILED
-        assert second_call["data"]["tool_name"] == "get_weather"
-        assert "ValueError" in second_call["data"]["error_message"]
-        assert "Weather API unavailable" in second_call["data"]["error_message"]
-        assert second_call["data"]["retry_count"] == 0
+        assert second_call["message_type"] == TOOL_EXECUTION_STARTED
+
+        # Verify third write is ToolExecutionFailed
+        third_call = mock_write.call_args_list[2][1]
+        assert third_call["message_type"] == TOOL_EXECUTION_FAILED
+        assert third_call["data"]["tool_name"] == "get_weather"
+        assert "ValueError" in third_call["data"]["error_message"]
+        assert "Weather API unavailable" in third_call["data"]["error_message"]
+        assert third_call["data"]["retry_count"] == 0
 
     def test_multiple_tool_calls_all_executed(self, tool_registry, mock_store_client):
         """Test that multiple tool calls are all executed in order."""
@@ -221,21 +236,27 @@ class TestExecuteToolStep:
         # Should succeed
         assert success is True
 
-        # Should write 4 events (2 requested + 2 completed)
-        assert mock_write.call_count == 4
+        # Should write 6 events (2 * (requested + started + completed))
+        assert mock_write.call_count == 6
 
-        # Verify order: requested, completed, requested, completed
+        # Verify order: requested, started, completed, requested, started, completed
         assert mock_write.call_args_list[0][1]["message_type"] == TOOL_EXECUTION_REQUESTED
         assert mock_write.call_args_list[0][1]["data"]["tool_name"] == "get_weather"
 
-        assert mock_write.call_args_list[1][1]["message_type"] == TOOL_EXECUTION_COMPLETED
+        assert mock_write.call_args_list[1][1]["message_type"] == TOOL_EXECUTION_STARTED
         assert mock_write.call_args_list[1][1]["data"]["tool_name"] == "get_weather"
 
-        assert mock_write.call_args_list[2][1]["message_type"] == TOOL_EXECUTION_REQUESTED
-        assert mock_write.call_args_list[2][1]["data"]["tool_name"] == "get_time"
+        assert mock_write.call_args_list[2][1]["message_type"] == TOOL_EXECUTION_COMPLETED
+        assert mock_write.call_args_list[2][1]["data"]["tool_name"] == "get_weather"
 
-        assert mock_write.call_args_list[3][1]["message_type"] == TOOL_EXECUTION_COMPLETED
+        assert mock_write.call_args_list[3][1]["message_type"] == TOOL_EXECUTION_REQUESTED
         assert mock_write.call_args_list[3][1]["data"]["tool_name"] == "get_time"
+
+        assert mock_write.call_args_list[4][1]["message_type"] == TOOL_EXECUTION_STARTED
+        assert mock_write.call_args_list[4][1]["data"]["tool_name"] == "get_time"
+
+        assert mock_write.call_args_list[5][1]["message_type"] == TOOL_EXECUTION_COMPLETED
+        assert mock_write.call_args_list[5][1]["data"]["tool_name"] == "get_time"
 
     def test_mixed_success_and_failure_returns_false(self, mock_store_client):
         """Test that if some tools succeed and some fail, returns False."""
@@ -302,10 +323,13 @@ class TestExecuteToolStep:
         # Should fail
         assert success is False
 
+        # Should write 3 events: Requested, Started, Failed (tool not found happens during execution)
+        assert mock_write.call_count == 3
+
         # Verify ToolExecutionFailed was written
-        second_call = mock_write.call_args_list[1][1]
-        assert second_call["message_type"] == TOOL_EXECUTION_FAILED
-        assert "not found" in second_call["data"]["error_message"].lower()
+        third_call = mock_write.call_args_list[2][1]
+        assert third_call["message_type"] == TOOL_EXECUTION_FAILED
+        assert "not found" in third_call["data"]["error_message"].lower()
 
     def test_raises_error_if_requested_event_write_fails(
         self, sample_events_with_tool_calls, tool_registry, mock_store_client
@@ -328,15 +352,15 @@ class TestExecuteToolStep:
     def test_raises_error_if_completed_event_write_fails(
         self, sample_events_with_tool_calls, tool_registry, mock_store_client
     ):
-        """Test that ToolStepError is raised if completed event write fails."""
+        """Test that ToolStepError is raised if started event write fails."""
         stream_name = "agent:v0-test123"
 
-        # First write succeeds (requested), second write fails (completed)
+        # First write succeeds (requested), second write fails (started)
         with patch(
             "messagedb_agent.engine.steps.tool.write_message",
             side_effect=[1, Exception("Database error")],
         ):
-            with pytest.raises(ToolStepError, match="Failed to write completed event"):
+            with pytest.raises(ToolStepError, match="Failed to write started event"):
                 execute_tool_step(
                     events=sample_events_with_tool_calls,
                     tool_registry=tool_registry,
@@ -347,7 +371,7 @@ class TestExecuteToolStep:
     def test_raises_error_if_failed_event_write_fails(
         self, sample_events_with_tool_calls, mock_store_client
     ):
-        """Test that ToolStepError is raised if failed event write fails."""
+        """Test that ToolStepError is raised if started event write fails."""
         stream_name = "agent:v0-test123"
 
         # Create registry with failing tool
@@ -357,12 +381,12 @@ class TestExecuteToolStep:
         def get_weather(city: str) -> str:
             raise ValueError("Error")
 
-        # First write succeeds (requested), second write fails (failed)
+        # First write succeeds (requested), second write fails (started)
         with patch(
             "messagedb_agent.engine.steps.tool.write_message",
             side_effect=[1, Exception("Database error")],
         ):
-            with pytest.raises(ToolStepError, match="Failed to write failed event"):
+            with pytest.raises(ToolStepError, match="Failed to write started event"):
                 execute_tool_step(
                     events=sample_events_with_tool_calls,
                     tool_registry=registry,
@@ -384,8 +408,8 @@ class TestExecuteToolStep:
                 store_client=mock_store_client,
             )
 
-        # Verify execution time is in completed event
-        completed_call = mock_write.call_args_list[1][1]
+        # Verify execution time is in completed event (third write)
+        completed_call = mock_write.call_args_list[2][1]
         assert "execution_time_ms" in completed_call["data"]
         assert completed_call["data"]["execution_time_ms"] >= 0
 
@@ -421,11 +445,15 @@ class TestExecuteToolStep:
                 store_client=mock_store_client,
             )
 
-        # Verify tool_index in metadata
-        assert mock_write.call_args_list[0][1]["metadata"]["tool_index"] == 0
-        assert mock_write.call_args_list[1][1]["metadata"]["tool_index"] == 0
-        assert mock_write.call_args_list[2][1]["metadata"]["tool_index"] == 1
-        assert mock_write.call_args_list[3][1]["metadata"]["tool_index"] == 1
+        # Verify tool_index in metadata (requested, started, completed for each tool)
+        # Tool 0
+        assert mock_write.call_args_list[0][1]["metadata"]["tool_index"] == 0  # requested
+        assert mock_write.call_args_list[1][1]["metadata"]["tool_index"] == 0  # started
+        assert mock_write.call_args_list[2][1]["metadata"]["tool_index"] == 0  # completed
+        # Tool 1
+        assert mock_write.call_args_list[3][1]["metadata"]["tool_index"] == 1  # requested
+        assert mock_write.call_args_list[4][1]["metadata"]["tool_index"] == 1  # started
+        assert mock_write.call_args_list[5][1]["metadata"]["tool_index"] == 1  # completed
 
     def test_empty_events_list_returns_success(self, tool_registry, mock_store_client):
         """Test that empty events list returns success."""

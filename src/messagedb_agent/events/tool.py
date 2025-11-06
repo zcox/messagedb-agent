@@ -191,6 +191,7 @@ class ToolExecutionRejectedData(EventData):
 
 # Event type constants for consistency
 TOOL_EXECUTION_REQUESTED = "ToolExecutionRequested"
+TOOL_EXECUTION_STARTED = "ToolExecutionStarted"
 TOOL_EXECUTION_APPROVED = "ToolExecutionApproved"
 TOOL_EXECUTION_REJECTED = "ToolExecutionRejected"
 TOOL_EXECUTION_COMPLETED = "ToolExecutionCompleted"

@@ -13,7 +13,11 @@ from typing import Any
 
 import structlog
 
-from messagedb_agent.events.agent import LLM_CALL_FAILED, LLM_RESPONSE_RECEIVED
+from messagedb_agent.events.agent import (
+    LLM_CALL_FAILED,
+    LLM_CALL_STARTED,
+    LLM_RESPONSE_RECEIVED,
+)
 from messagedb_agent.events.base import BaseEvent
 from messagedb_agent.llm import (
     DEFAULT_SYSTEM_PROMPT,
@@ -111,7 +115,25 @@ def execute_llm_step(
     # Step 3: Use provided system prompt or default
     prompt = system_prompt if system_prompt is not None else DEFAULT_SYSTEM_PROMPT
 
-    # Step 4: Call LLM with retries
+    # Step 4: Write LLMCallStarted event
+    try:
+        write_message(
+            client=store_client,
+            stream_name=stream_name,
+            message_type=LLM_CALL_STARTED,
+            data={
+                "message_count": len(messages),
+                "tool_count": len(tools),
+                "system_prompt_length": len(prompt),
+            },
+            metadata={},
+        )
+        log.info("LLMCallStarted event written")
+    except Exception as e:
+        log.error("Failed to write LLMCallStarted event", error=str(e))
+        raise LLMStepError(f"Failed to write LLMCallStarted event: {e}") from e
+
+    # Step 5: Call LLM with retries
     retry_count = 0
     last_error: Exception | None = None
 
@@ -143,7 +165,7 @@ def execute_llm_step(
                 for tc in response.tool_calls:
                     print_tool_call(tc.id, tc.name, tc.arguments)
 
-            # Step 5: Write LLMResponseReceived event
+            # Step 6: Write LLMResponseReceived event
             event_data: dict[str, Any] = {
                 "response_text": response.text or "",
                 "tool_calls": [

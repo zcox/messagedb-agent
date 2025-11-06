@@ -124,5 +124,6 @@ class LLMCallFailedData(EventData):
 
 
 # Event type constants for consistency
+LLM_CALL_STARTED = "LLMCallStarted"
 LLM_RESPONSE_RECEIVED = "LLMResponseReceived"
 LLM_CALL_FAILED = "LLMCallFailed"

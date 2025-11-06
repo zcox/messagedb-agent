@@ -22,8 +22,8 @@ from fastapi.templating import Jinja2Templates
 from messagedb_agent.config import VertexAIConfig
 from messagedb_agent.display.agent_runner import run_agent_step
 from messagedb_agent.display.models import RenderRequest, RenderResponse
-from messagedb_agent.display.progress import ProgressEvent, ProgressStage
 from messagedb_agent.display.renderer import render_html
+from messagedb_agent.events.display import HTML_RENDERING_COMPLETED, HTML_RENDERING_STARTED
 from messagedb_agent.projections.display_prefs import project_display_prefs
 from messagedb_agent.store import MessageDBClient, MessageDBConfig, read_stream, write_message
 
@@ -263,11 +263,14 @@ def create_app() -> FastAPI:
 
                 current_prefs = project_display_prefs(display_prefs_dicts)
 
-                # Step 7: Render HTML
-                yield ProgressEvent(
-                    stage=ProgressStage.RENDERING_HTML,
-                    message="Generating HTML display",
-                ).to_sse()
+                # Step 7: Write HTMLRenderingStarted event and render HTML
+                write_message(
+                    client=store_client,
+                    stream_name=stream_name,
+                    message_type=HTML_RENDERING_STARTED,
+                    data={"event_count": len(events)},
+                    metadata={},
+                )
 
                 html = await render_html(
                     events=events,
@@ -276,13 +279,17 @@ def create_app() -> FastAPI:
                     previous_html=request.previous_html,
                 )
 
+                # Write HTMLRenderingCompleted event
+                write_message(
+                    client=store_client,
+                    stream_name=stream_name,
+                    message_type=HTML_RENDERING_COMPLETED,
+                    data={"html_length": len(html)},
+                    metadata={},
+                )
+
                 # Step 8: Send final result
                 result = RenderResponse(html=html, display_prefs=current_prefs)
-                yield ProgressEvent(
-                    stage=ProgressStage.COMPLETE,
-                    message="Rendering complete",
-                    details={"html_length": len(html)},
-                ).to_sse()
 
                 yield f"event: result\ndata: {json.dumps(result.model_dump())}\n\n"
 

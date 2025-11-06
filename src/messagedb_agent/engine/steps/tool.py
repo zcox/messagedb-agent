@@ -25,6 +25,7 @@ from messagedb_agent.events.tool import (
     TOOL_EXECUTION_FAILED,
     TOOL_EXECUTION_REJECTED,
     TOOL_EXECUTION_REQUESTED,
+    TOOL_EXECUTION_STARTED,
 )
 from messagedb_agent.output import print_tool_result
 from messagedb_agent.projections import project_to_tool_arguments
@@ -288,7 +289,23 @@ def execute_tool_step(
                 raise ToolStepError(f"Failed to write failed event for {tool_name}: {e}") from e
             continue  # Skip to next tool
 
-        # Tool is approved, execute it
+        # Tool is approved, write ToolExecutionStarted event and then execute it
+        try:
+            write_message(
+                client=store_client,
+                stream_name=stream_name,
+                message_type=TOOL_EXECUTION_STARTED,
+                data={
+                    "tool_name": tool_name,
+                    "arguments": arguments,
+                },
+                metadata={"tool_id": tool_id, "tool_call_id": tool_id, "tool_index": i},
+            )
+            log_tool.info("ToolExecutionStarted event written")
+        except Exception as e:
+            log_tool.error("Failed to write ToolExecutionStarted event", error=str(e))
+            raise ToolStepError(f"Failed to write started event for {tool_name}: {e}") from e
+
         log_tool.debug("Executing tool", arguments=arguments)
         result = execute_tool(tool_name, arguments, tool_registry)
 
