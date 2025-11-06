@@ -55,7 +55,7 @@ def create_app() -> FastAPI:
     # Set up Jinja2 templates
     templates = Jinja2Templates(directory=str(module_dir / "templates"))
 
-    @app.get("/", response_class=HTMLResponse)
+    @app.get("/", response_model=None)
     async def index(request: Request, thread_id: str | None = None) -> HTMLResponse | RedirectResponse:  # type: ignore[reportUnusedFunction]  # noqa: E501
         """Serve the main agent interface.
 
