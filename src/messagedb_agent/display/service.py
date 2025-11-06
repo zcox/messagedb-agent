@@ -7,6 +7,7 @@ that processes user messages and renders event streams as HTML.
 import asyncio
 import json
 import os
+import uuid
 from collections.abc import AsyncIterator
 from datetime import UTC
 from pathlib import Path
@@ -15,7 +16,7 @@ from typing import Any
 import structlog
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -55,16 +56,24 @@ def create_app() -> FastAPI:
     templates = Jinja2Templates(directory=str(module_dir / "templates"))
 
     @app.get("/", response_class=HTMLResponse)
-    async def index(request: Request, thread_id: str) -> HTMLResponse:  # type: ignore[reportUnusedFunction]  # noqa: E501
+    async def index(request: Request, thread_id: str | None = None) -> HTMLResponse | RedirectResponse:  # type: ignore[reportUnusedFunction]  # noqa: E501
         """Serve the main agent interface.
+
+        If no thread_id is provided, generates a new UUID and redirects to the URL with
+        the thread_id query parameter.
 
         Args:
             request: FastAPI request object
-            thread_id: Thread ID to display
+            thread_id: Thread ID to display (optional - generates new UUID if not provided)
 
         Returns:
-            HTML response with the chat interface
+            HTML response with the chat interface, or redirect if thread_id not provided
         """
+        if thread_id is None:
+            # Generate new thread ID and redirect
+            new_thread_id = str(uuid.uuid4())
+            return RedirectResponse(url=f"/?thread_id={new_thread_id}", status_code=302)
+
         return templates.TemplateResponse(
             "index.html", {"request": request, "thread_id": thread_id}
         )
