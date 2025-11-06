@@ -158,6 +158,13 @@ def create_app() -> FastAPI:
                 last_message = get_last_stream_message(store_client, stream_name)
                 start_position = last_message.global_position + 1 if last_message else 0
 
+                logger.info(
+                    "Subscriber starting position",
+                    stream_name=stream_name,
+                    start_position=start_position,
+                    has_existing_events=last_message is not None,
+                )
+
                 # Step 2: Handle user message (if provided)
                 if request.user_message:
                     from datetime import datetime
@@ -182,6 +189,13 @@ def create_app() -> FastAPI:
                 # Create sync handler that puts events in thread-safe queue
                 def event_handler(message: Any) -> None:
                     """Handle incoming events from subscriber."""
+                    logger.debug(
+                        "Subscriber received event",
+                        event_type=message.type,
+                        stream_name=message.stream_name,
+                        expected_stream=stream_name,
+                        global_position=message.global_position,
+                    )
                     # Only forward events for our specific thread
                     if message.stream_name == stream_name:
                         event_dict = {
@@ -193,6 +207,11 @@ def create_app() -> FastAPI:
                             "time": message.time.isoformat(),
                         }
                         event_queue.put(event_dict)
+                        logger.info(
+                            "Event queued for SSE",
+                            event_type=message.type,
+                            queue_size=event_queue.qsize(),
+                        )
 
                 # Create subscriber (starts from our saved position)
                 subscriber = Subscriber(
@@ -222,6 +241,8 @@ def create_app() -> FastAPI:
                 # Step 5: Stream events from queue to SSE
                 # If no agent task, just read current events and render
                 if agent_task is not None:
+                    logger.info("Starting to stream events to SSE client")
+                    events_sent = 0
                     while not agent_task.done():
                         try:
                             # Poll queue with timeout (non-blocking for async compatibility)
@@ -229,6 +250,12 @@ def create_app() -> FastAPI:
 
                             # Send event as SSE
                             yield f"event: agent_event\ndata: {json.dumps(event)}\n\n"
+                            events_sent += 1
+                            logger.info(
+                                "Sent agent_event to client",
+                                event_type=event["type"],
+                                events_sent=events_sent,
+                            )
 
                         except queue.Empty:
                             # No events yet, yield control to event loop
@@ -236,12 +263,21 @@ def create_app() -> FastAPI:
                             continue
 
                     # Drain any remaining events from queue
+                    logger.info("Agent task complete, draining remaining events")
                     while not event_queue.empty():
                         try:
                             event = event_queue.get_nowait()
                             yield f"event: agent_event\ndata: {json.dumps(event)}\n\n"
+                            events_sent += 1
+                            logger.info(
+                                "Sent queued agent_event to client",
+                                event_type=event["type"],
+                                events_sent=events_sent,
+                            )
                         except queue.Empty:
                             break
+
+                    logger.info("Total agent events sent", total_events=events_sent)
 
                     # Wait for agent task to complete (should be done)
                     await agent_task
