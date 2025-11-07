@@ -22,7 +22,7 @@ IMPORTANT RULES:
 1. Generate an HTML FRAGMENT (NOT a complete document - no <!DOCTYPE>, <html>, <head>,
    or <body> tags)
 2. The HTML will be inserted into a <div> container on an existing page
-3. Start with a <style> tag containing all CSS for your fragment
+3. Start with a COMPLETE <style> tag containing all CSS for your fragment
 4. After the <style> tag, use semantic HTML5 elements (article, section, div, etc.) for content
 5. Make the HTML responsive and mobile-friendly
 6. Use semantic HTML5 elements for structure
@@ -31,6 +31,14 @@ IMPORTANT RULES:
 9. Use consistent styling and colors
 10. If previous_html is provided, maintain consistent styling
 11. Apply any display preferences specified
+
+STREAMING OPTIMIZATION (IMPORTANT):
+- Generate content SEQUENTIALLY from top to bottom
+- Complete each HTML element BEFORE starting the next one
+- Do NOT go back to edit or revise earlier sections
+- Output final content immediately (NO placeholders or TODO markers)
+- Generate the complete <style> section first, then move to content
+- Work linearly through the conversation events in order
 
 OUTPUT ONLY THE HTML FRAGMENT - NO EXPLANATIONS OR MARKDOWN CODE BLOCKS."""
 
@@ -62,6 +70,7 @@ def sanitize_html(html: str) -> str:
     """Sanitize HTML to prevent XSS attacks.
 
     Uses nh3 library to clean HTML while preserving safe elements and attributes.
+    Allows <style> tags since we generate inline CSS for fragment styling.
 
     Args:
         html: Raw HTML string to sanitize
@@ -69,9 +78,89 @@ def sanitize_html(html: str) -> str:
     Returns:
         Sanitized HTML safe for display
     """
-    # nh3 uses a safe default set of allowed tags and attributes
-    # This includes common HTML elements but blocks dangerous ones like <script>
-    return nh3.clean(html)
+    # Default nh3 allowed tags
+    allowed_tags = {
+        "a",
+        "abbr",
+        "acronym",
+        "area",
+        "article",
+        "aside",
+        "b",
+        "bdi",
+        "bdo",
+        "blockquote",
+        "br",
+        "caption",
+        "center",
+        "cite",
+        "code",
+        "col",
+        "colgroup",
+        "data",
+        "dd",
+        "del",
+        "details",
+        "dfn",
+        "div",
+        "dl",
+        "dt",
+        "em",
+        "figcaption",
+        "figure",
+        "footer",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "header",
+        "hgroup",
+        "hr",
+        "i",
+        "img",
+        "ins",
+        "kbd",
+        "li",
+        "main",
+        "map",
+        "mark",
+        "nav",
+        "ol",
+        "p",
+        "pre",
+        "q",
+        "rp",
+        "rt",
+        "ruby",
+        "s",
+        "samp",
+        "section",
+        "small",
+        "span",
+        "strike",
+        "strong",
+        "sub",
+        "summary",
+        "sup",
+        "table",
+        "tbody",
+        "td",
+        "th",
+        "thead",
+        "time",
+        "tr",
+        "tt",
+        "u",
+        "ul",
+        "var",
+        "wbr",
+        "style",  # Allow style tags for inline CSS
+    }
+
+    # Clean with extended tag set and empty clean_content_tags to preserve style content
+    return nh3.clean(html, tags=allowed_tags, clean_content_tags=set())
 
 
 async def render_html(
