@@ -13,8 +13,8 @@ from messagedb_agent.config import VertexAIConfig
 from messagedb_agent.display.agent_runner import run_agent_step_streaming
 from messagedb_agent.events.agent import LLM_RESPONSE_RECEIVED
 from messagedb_agent.events.system import SESSION_STARTED
-from messagedb_agent.events.user import USER_MESSAGE_ADDED
 from messagedb_agent.events.tool import TOOL_EXECUTION_COMPLETED
+from messagedb_agent.events.user import USER_MESSAGE_ADDED
 from messagedb_agent.llm.base import StreamDelta
 from messagedb_agent.store import MessageDBClient
 
