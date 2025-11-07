@@ -4,6 +4,9 @@
 const THREAD_ID = window.THREAD_ID;
 let currentHTML = null;
 let isProcessing = false;
+let agentMessageEl = null;
+let htmlBuffer = '';
+let toolIndicators = {};
 
 /**
  * Update the progress indicator
@@ -74,6 +77,135 @@ function displayAgentEvent(event) {
 }
 
 /**
+ * Create a streaming message bubble for agent responses
+ * @param {string} role - Message role ('agent' or 'user')
+ * @returns {HTMLElement} The created message element
+ */
+function createStreamingMessageBubble(role) {
+    let container = document.getElementById('rendered-content');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'rendered-content';
+        document.body.insertBefore(container, document.body.firstChild);
+    }
+
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `message message-${role} message-streaming`;
+    messageDiv.innerHTML = '<div class="message-content"></div><div class="message-tools"></div>';
+    container.appendChild(messageDiv);
+
+    // Scroll to bottom
+    container.scrollTop = container.scrollHeight;
+
+    return messageDiv;
+}
+
+/**
+ * Append text to a streaming message
+ * @param {HTMLElement} messageEl - The message element
+ * @param {string} text - Text to append
+ */
+function appendTextToMessage(messageEl, text) {
+    if (!messageEl) return;
+
+    const contentDiv = messageEl.querySelector('.message-content');
+    if (!contentDiv) return;
+
+    contentDiv.textContent += text;
+
+    // Scroll to bottom
+    const container = document.getElementById('rendered-content');
+    if (container) {
+        container.scrollTop = container.scrollHeight;
+    }
+}
+
+/**
+ * Show a tool call indicator in the message
+ * @param {HTMLElement} messageEl - The message element
+ * @param {string} name - Tool name
+ * @param {string} id - Tool call ID
+ */
+function showToolCallIndicator(messageEl, name, id) {
+    if (!messageEl) return;
+
+    const toolsDiv = messageEl.querySelector('.message-tools');
+    if (!toolsDiv) return;
+
+    const indicator = document.createElement('div');
+    indicator.className = 'tool-indicator tool-pending';
+    indicator.id = `tool-${id}`;
+    indicator.innerHTML = `<span class="tool-name">${name}</span><span class="tool-status">pending</span>`;
+    toolsDiv.appendChild(indicator);
+
+    toolIndicators[name] = indicator;
+}
+
+/**
+ * Update tool execution status
+ * @param {string} name - Tool name
+ * @param {string} status - Status ('executing' or 'complete')
+ */
+function updateToolStatus(name, status) {
+    const indicator = toolIndicators[name];
+    if (!indicator) return;
+
+    indicator.className = `tool-indicator tool-${status}`;
+    indicator.querySelector('.tool-status').textContent = status;
+}
+
+/**
+ * Show token usage information
+ * @param {object} tokenUsage - Token usage data
+ */
+function showTokenUsage(tokenUsage) {
+    if (!tokenUsage) return;
+
+    updateProgress('LLM processing complete', {
+        input_tokens: tokenUsage.input_tokens,
+        output_tokens: tokenUsage.output_tokens
+    });
+}
+
+/**
+ * Finalize the agent message (remove streaming indicator)
+ * @param {HTMLElement} messageEl - The message element
+ */
+function finalizeAgentMessage(messageEl) {
+    if (!messageEl) return;
+
+    messageEl.classList.remove('message-streaming');
+}
+
+/**
+ * Show rendering progress
+ * @param {number} bytesReceived - Number of bytes received
+ */
+function showRenderingProgress(bytesReceived) {
+    updateProgress('Rendering formatted view...', {
+        bytes: bytesReceived
+    });
+}
+
+/**
+ * Display final HTML in the container
+ * @param {string} html - HTML content to display
+ */
+function displayFinalHTML(html) {
+    let container = document.getElementById('rendered-content');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'rendered-content';
+        document.body.insertBefore(container, document.body.firstChild);
+    }
+
+    container.innerHTML = html;
+
+    // Scroll to bottom
+    container.scrollTop = container.scrollHeight;
+}
+
+/**
  * Refresh the display using Server-Sent Events for progress updates
  * @param {string|null} userMessage - Optional user message to send
  */
@@ -140,24 +272,47 @@ async function refresh(userMessage = null) {
                 } else if (eventType === 'agent_event' && data) {
                     // Real-time agent event from Message DB subscriber
                     displayAgentEvent(data);
+                } else if (eventType === 'agent_start' && data) {
+                    // Agent streaming started - create message bubble
+                    agentMessageEl = createStreamingMessageBubble('agent');
+                    toolIndicators = {};
+                    updateProgress('Agent processing...', null);
+                } else if (eventType === 'agent_delta' && data) {
+                    // Agent streaming delta - handle different delta types
+                    switch (data.type) {
+                        case 'llm_text':
+                            appendTextToMessage(agentMessageEl, data.text);
+                            break;
+                        case 'llm_tool_call':
+                            showToolCallIndicator(agentMessageEl, data.name, data.id);
+                            break;
+                        case 'tool_executing':
+                            updateToolStatus(data.name, 'executing');
+                            updateProgress(`Executing tool: ${data.name}`, null);
+                            break;
+                        case 'tool_complete':
+                            updateToolStatus(data.name, 'complete');
+                            break;
+                        case 'llm_done':
+                            showTokenUsage(data.token_usage);
+                            break;
+                    }
+                } else if (eventType === 'agent_complete' && data) {
+                    // Agent streaming completed
+                    finalizeAgentMessage(agentMessageEl);
+                    updateProgress('Rendering formatted view...', null);
+                } else if (eventType === 'html_start' && data) {
+                    // HTML rendering started
+                    htmlBuffer = '';
+                    showRenderingProgress(0);
+                } else if (eventType === 'html_chunk' && data) {
+                    // HTML chunk received
+                    htmlBuffer += data.chunk;
+                    showRenderingProgress(htmlBuffer.length);
                 } else if (eventType === 'result' && data) {
                     // Final result
                     currentHTML = data.html;
-
-                    // Create a container for the rendered HTML if it doesn't exist
-                    let container = document.getElementById('rendered-content');
-                    if (!container) {
-                        container = document.createElement('div');
-                        container.id = 'rendered-content';
-                        // Insert at the beginning of body
-                        document.body.insertBefore(container, document.body.firstChild);
-                    }
-
-                    container.innerHTML = data.html;
-
-                    // Scroll to bottom
-                    container.scrollTop = container.scrollHeight;
-
+                    displayFinalHTML(data.html);
                     hideProgress();
                 } else if (eventType === 'error' && data) {
                     // Error occurred
