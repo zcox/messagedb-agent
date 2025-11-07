@@ -294,3 +294,87 @@ class TestStreamingCrossModelCompatibility:
         # Verify all deltas are StreamDelta instances
         for delta in gemini_deltas + claude_deltas:
             assert isinstance(delta, StreamDelta)
+
+
+class TestAgentRunnerStreaming:
+    """Test run_agent_step_streaming integration with real LLM."""
+
+    @pytest.mark.asyncio
+    async def test_agent_runner_streaming_with_claude(self, claude_client, docker_messagedb):
+        """Test run_agent_step_streaming with real Claude model."""
+        from messagedb_agent.config import MessageDBConfig, VertexAIConfig
+        from messagedb_agent.display.agent_runner import run_agent_step_streaming
+        from messagedb_agent.events.system import SESSION_STARTED
+        from messagedb_agent.events.user import USER_MESSAGE_ADDED
+        from messagedb_agent.store import MessageDBClient, write_message
+
+        # Create unique thread ID for this test
+        thread_id = f"stream-test-{os.getpid()}"
+        stream_name = f"agent:v0-{thread_id}"
+
+        # Setup MessageDB client
+        db_config = MessageDBConfig(
+            host=docker_messagedb["host"],
+            port=docker_messagedb["port"],
+            database=docker_messagedb["database"],
+            user=docker_messagedb["user"],
+            password=docker_messagedb["password"],
+        )
+
+        with MessageDBClient(db_config) as store_client:
+            # Write initial session events
+            write_message(
+                client=store_client,
+                stream_name=stream_name,
+                message_type=SESSION_STARTED,
+                data={"thread_id": thread_id},
+                metadata={},
+            )
+
+            write_message(
+                client=store_client,
+                stream_name=stream_name,
+                message_type=USER_MESSAGE_ADDED,
+                data={"message_text": "Count from 1 to 3."},
+                metadata={},
+            )
+
+            # Get LLM config
+            llm_config = VertexAIConfig(
+                project=os.getenv("GCP_PROJECT"),
+                location=os.getenv("GCP_LOCATION", "us-central1"),
+                model_name="claude-sonnet-4-5@20250929",
+            )
+
+            # Run streaming agent
+            deltas = []
+            async for delta in run_agent_step_streaming(
+                thread_id, store_client, llm_config, auto_approve_tools=True
+            ):
+                deltas.append(delta)
+                # Print for debugging
+                if delta["type"] == "llm_text":
+                    print(delta["text"], end="", flush=True)
+                elif delta["type"] == "llm_tool_call":
+                    print(f"\n[Tool call: {delta['name']}]")
+
+            print()  # Newline after streaming
+
+            # Verify we got deltas
+            assert len(deltas) > 0, "Should have received deltas"
+
+            # Verify text deltas
+            text_deltas = [d for d in deltas if d["type"] == "llm_text"]
+            assert len(text_deltas) > 0, "Should have text deltas"
+
+            # Verify done delta
+            done_deltas = [d for d in deltas if d["type"] == "llm_done"]
+            assert len(done_deltas) >= 1, "Should have at least one done delta"
+
+            # Verify final usage
+            final_usage = done_deltas[-1]["token_usage"]
+            assert "input_tokens" in final_usage
+            assert "output_tokens" in final_usage
+
+            print(f"[Agent Streaming Test] Received {len(text_deltas)} text deltas")
+            print(f"[Agent Streaming Test] Token usage: {final_usage}")

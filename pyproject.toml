@@ -86,6 +86,8 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --cov=messagedb_agent --cov-report=term-missing"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 markers = [
     "integration: marks tests as integration tests that require external services (deselect with '-m \"not integration\"')",
 ]
@@ -95,6 +97,7 @@ dev = [
     "basedpyright>=1.31.7",
     "black>=25.9.0",
     "pytest>=8.4.2",
+    "pytest-asyncio>=1.2.0",
     "pytest-cov>=7.0.0",
     "pytest-docker>=3.2.3",
     "ruff>=0.14.1",
