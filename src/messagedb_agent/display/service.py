@@ -4,7 +4,6 @@ This module provides the main FastAPI application with the /render endpoint
 that processes user messages and renders event streams as HTML.
 """
 
-import asyncio
 import json
 import os
 import uuid
@@ -21,10 +20,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from messagedb_agent.config import VertexAIConfig
-from messagedb_agent.display.agent_runner import run_agent_step
+from messagedb_agent.display.agent_runner import run_agent_step, run_agent_step_streaming
 from messagedb_agent.display.models import RenderRequest, RenderResponse
-from messagedb_agent.display.renderer import render_html
-from messagedb_agent.events.display import HTML_RENDERING_COMPLETED, HTML_RENDERING_STARTED
+from messagedb_agent.display.renderer import render_html, render_html_stream, sanitize_html
 from messagedb_agent.projections.display_prefs import project_display_prefs
 from messagedb_agent.store import MessageDBClient, MessageDBConfig, read_stream, write_message
 
@@ -113,7 +111,7 @@ def create_app() -> FastAPI:
         """
 
         async def event_stream() -> AsyncIterator[str]:
-            """Generate SSE events by polling the stream and final result."""
+            """Generate SSE events with dual streaming (agent LLM + HTML rendering)."""
             store_client: MessageDBClient | None = None
 
             try:
@@ -151,15 +149,7 @@ def create_app() -> FastAPI:
                 store_client = MessageDBClient(db_config)
                 store_client.__enter__()
 
-                # Get current stream length to track new events
-                existing_events = read_stream(store_client, stream_name)
-                last_seen_position = len(existing_events) - 1 if existing_events else -1
-
-                logger.info(
-                    "Starting event stream",
-                    stream_name=stream_name,
-                    last_seen_position=last_seen_position,
-                )
+                logger.info("Starting dual streaming event stream", stream_name=stream_name)
 
                 # Step 2: Handle user message (if provided)
                 if request.user_message:
@@ -178,91 +168,27 @@ def create_app() -> FastAPI:
                         metadata={},
                     )
 
-                # Step 3: Run agent processing (if user message provided)
-                agent_task: asyncio.Task[None] | None = None
+                # Phase 1: Agent streaming (if user message provided)
                 if request.user_message:
-                    agent_task = asyncio.create_task(
-                        run_agent_step(
-                            thread_id=request.thread_id,
-                            store_client=store_client,
-                            llm_config=agent_llm_config,
-                            auto_approve_tools=True,
-                        )
-                    )
+                    logger.info("Starting agent streaming phase")
+                    yield "event: agent_start\ndata: {}\n\n"
 
-                # Step 4: Poll stream and stream new events via SSE
-                # If no agent task, just read current events and render
-                if agent_task is not None:
-                    logger.info("Starting to poll and stream events to SSE client")
-                    events_sent = 0
+                    # Stream agent LLM deltas
+                    async for delta in run_agent_step_streaming(
+                        thread_id=request.thread_id,
+                        store_client=store_client,
+                        llm_config=agent_llm_config,
+                        auto_approve_tools=True,
+                    ):
+                        yield f"event: agent_delta\ndata: {json.dumps(delta)}\n\n"
 
-                    while not agent_task.done():
-                        # Poll stream for new events
-                        current_events = read_stream(store_client, stream_name)
+                    yield "event: agent_complete\ndata: {}\n\n"
+                    logger.info("Agent streaming phase complete")
 
-                        # Check for new events since last poll
-                        if len(current_events) > last_seen_position + 1:
-                            # Stream new events
-                            new_events = current_events[last_seen_position + 1 :]
-                            for event in new_events:
-                                event_dict = {
-                                    "type": event.type,
-                                    "data": event.data,
-                                    "metadata": event.metadata,
-                                    "position": event.position,
-                                    "global_position": event.global_position,
-                                    "time": event.time.isoformat(),
-                                }
-
-                                yield f"event: agent_event\ndata: {json.dumps(event_dict)}\n\n"
-                                events_sent += 1
-                                logger.info(
-                                    "Sent agent_event to client",
-                                    event_type=event.type,
-                                    position=event.position,
-                                    events_sent=events_sent,
-                                )
-
-                            # Update last seen position
-                            last_seen_position = len(current_events) - 1
-
-                        # Sleep before next poll
-                        await asyncio.sleep(0.1)
-
-                    logger.info("Agent task complete, checking for final events")
-
-                    # One final poll to catch any events written right at the end
-                    final_events = read_stream(store_client, stream_name)
-                    if len(final_events) > last_seen_position + 1:
-                        new_events = final_events[last_seen_position + 1 :]
-                        for event in new_events:
-                            event_dict = {
-                                "type": event.type,
-                                "data": event.data,
-                                "metadata": event.metadata,
-                                "position": event.position,
-                                "global_position": event.global_position,
-                                "time": event.time.isoformat(),
-                            }
-
-                            yield f"event: agent_event\ndata: {json.dumps(event_dict)}\n\n"
-                            events_sent += 1
-                            logger.info(
-                                "Sent final agent_event to client",
-                                event_type=event.type,
-                                position=event.position,
-                                events_sent=events_sent,
-                            )
-
-                    logger.info("Total agent events sent", total_events=events_sent)
-
-                    # Wait for agent task to complete (should be done)
-                    await agent_task
-
-                # Step 5: Read all events for HTML rendering
+                # Step 3: Read all events for HTML rendering
                 events = read_stream(store_client, stream_name)
 
-                # Step 6: Read and project display preferences
+                # Step 4: Read and project display preferences
                 display_prefs_events = read_stream(store_client, display_prefs_stream)
 
                 # Convert events to dicts for projection
@@ -272,72 +198,58 @@ def create_app() -> FastAPI:
 
                 current_prefs = project_display_prefs(display_prefs_dicts)
 
-                # Step 7: Write HTMLRenderingStarted event and stream it
-                position = write_message(
-                    client=store_client,
-                    stream_name=stream_name,
-                    message_type=HTML_RENDERING_STARTED,
-                    data={"event_count": len(events)},
-                    metadata={},
-                )
+                # Phase 2: HTML rendering streaming
+                logger.info("Starting HTML rendering streaming phase")
+                yield "event: html_start\ndata: {}\n\n"
 
-                # Stream the HTMLRenderingStarted event
-                rendering_started_events = read_stream(store_client, stream_name, position=position)
-                if rendering_started_events:
-                    event = rendering_started_events[0]
-                    event_dict = {
-                        "type": event.type,
-                        "data": event.data,
-                        "metadata": event.metadata,
-                        "position": event.position,
-                        "global_position": event.global_position,
-                        "time": event.time.isoformat(),
-                    }
-                    yield f"event: agent_event\ndata: {json.dumps(event_dict)}\n\n"
-                    logger.info("Sent HTMLRenderingStarted event to client")
+                # Buffer HTML chunks for final sanitization
+                html_chunks: list[str] = []
 
-                html = await render_html(
+                async for chunk in render_html_stream(
                     events=events,
                     display_prefs=current_prefs,
                     llm_config=render_llm_config,
                     previous_html=request.previous_html,
+                ):
+                    html_chunks.append(chunk)
+                    yield f'event: html_chunk\ndata: {json.dumps({"chunk": chunk})}\n\n'
+
+                logger.info("HTML streaming complete, processing final HTML")
+
+                # Process complete HTML (extract from markdown if needed and sanitize)
+                raw_html = "".join(html_chunks)
+
+                # Extract HTML if LLM wrapped it in markdown code blocks
+                if "```html" in raw_html:
+                    start = raw_html.find("```html") + 7
+                    end = raw_html.find("```", start)
+                    if end > start:
+                        raw_html = raw_html[start:end].strip()
+                elif "```" in raw_html:
+                    start = raw_html.find("```") + 3
+                    end = raw_html.find("```", start)
+                    if end > start:
+                        raw_html = raw_html[start:end].strip()
+
+                # Sanitize HTML
+                final_html = sanitize_html(raw_html)
+
+                logger.info(
+                    "Final HTML processed",
+                    raw_length=len(raw_html),
+                    sanitized_length=len(final_html),
                 )
 
-                # Write HTMLRenderingCompleted event and stream it
-                position = write_message(
-                    client=store_client,
-                    stream_name=stream_name,
-                    message_type=HTML_RENDERING_COMPLETED,
-                    data={"html_length": len(html)},
-                    metadata={},
-                )
-
-                # Stream the HTMLRenderingCompleted event
-                rendering_completed_events = read_stream(
-                    store_client, stream_name, position=position
-                )
-                if rendering_completed_events:
-                    event = rendering_completed_events[0]
-                    event_dict = {
-                        "type": event.type,
-                        "data": event.data,
-                        "metadata": event.metadata,
-                        "position": event.position,
-                        "global_position": event.global_position,
-                        "time": event.time.isoformat(),
-                    }
-                    yield f"event: agent_event\ndata: {json.dumps(event_dict)}\n\n"
-                    logger.info("Sent HTMLRenderingCompleted event to client")
-
-                # Step 8: Send final result
-                result = RenderResponse(html=html, display_prefs=current_prefs)
-
+                # Phase 3: Send final result
+                result = RenderResponse(html=final_html, display_prefs=current_prefs)
                 yield f"event: result\ndata: {json.dumps(result.model_dump())}\n\n"
+
+                logger.info("Dual streaming complete")
 
             except Exception as e:
                 logger.error("Render stream failed", error=str(e), error_type=type(e).__name__)
-                # Send error event
-                yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
+                # Send error event in SSE format
+                yield f'event: error\ndata: {json.dumps({"error": str(e)})}\n\n'
 
             finally:
                 # Cleanup: close store client
