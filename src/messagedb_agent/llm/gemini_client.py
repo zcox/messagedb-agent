@@ -4,6 +4,8 @@ This module provides a Gemini-specific implementation of the BaseLLMClient
 interface, using the Vertex AI SDK's GenerativeModel API.
 """
 
+from collections.abc import Iterator
+
 import vertexai
 from google.auth import default  # type: ignore[import-untyped]
 from vertexai.generative_models import (
@@ -22,6 +24,7 @@ from messagedb_agent.llm.base import (
     LLMResponse,
     LLMResponseError,
     Message,
+    StreamDelta,
     ToolCall,
     ToolDeclaration,
 )
@@ -148,6 +151,136 @@ class GeminiClient(BaseLLMClient):
         except Exception as e:
             # Wrap any other exceptions as LLMAPIError
             raise LLMAPIError(f"Gemini API call failed: {e}") from e
+
+    def call_stream(
+        self,
+        messages: list[Message],
+        tools: list[ToolDeclaration] | None = None,
+        system_prompt: str | None = None,
+    ) -> Iterator[StreamDelta]:
+        """Call the Gemini LLM with streaming enabled.
+
+        Args:
+            messages: List of conversation messages
+            tools: Optional list of tool declarations for function calling
+            system_prompt: Optional system prompt to set context
+
+        Yields:
+            StreamDelta objects representing incremental updates
+
+        Raises:
+            LLMAPIError: If the API call fails
+            LLMResponseError: If the response cannot be parsed
+            RuntimeError: If called before initialize()
+        """
+        if not self._initialized:
+            raise RuntimeError(
+                "GeminiClient must be initialized before calling. Call initialize()."
+            )
+
+        if not messages:
+            raise ValueError("messages cannot be empty")
+
+        try:
+            # Convert messages to Vertex AI Content format
+            contents = self._format_messages(messages, system_prompt)
+
+            # Convert tools to Vertex AI format
+            vertex_tools: list[Tool] | None = None
+            if tools:
+                function_declarations = [
+                    FunctionDeclaration(
+                        name=tool.name,
+                        description=tool.description,
+                        parameters=tool.parameters,
+                    )
+                    for tool in tools
+                ]
+                vertex_tools = [Tool(function_declarations=function_declarations)]
+
+            # Get model and make streaming API call
+            model = GenerativeModel(self.config.model_name)
+            stream = model.generate_content(
+                contents=contents,
+                tools=vertex_tools,
+                stream=True,
+            )
+
+            # Accumulate token usage across chunks
+            total_input_tokens = 0
+            total_output_tokens = 0
+            total_tokens = 0
+
+            # Track if we've seen any tool calls
+            seen_tool_calls = False
+            tool_call_index = 0
+
+            # Iterate over streaming responses
+            for chunk in stream:
+                # Extract token usage if available
+                if hasattr(chunk, "usage_metadata") and chunk.usage_metadata:
+                    usage = chunk.usage_metadata
+                    if hasattr(usage, "prompt_token_count"):
+                        total_input_tokens = usage.prompt_token_count
+                    if hasattr(usage, "candidates_token_count"):
+                        total_output_tokens = usage.candidates_token_count
+                    if hasattr(usage, "total_token_count"):
+                        total_tokens = usage.total_token_count
+
+                # Check if we have candidates
+                if not chunk.candidates:
+                    continue
+
+                candidate = chunk.candidates[0]
+
+                # Handle function calls (tool calls)
+                if hasattr(candidate, "function_calls") and candidate.function_calls:
+                    for fc in candidate.function_calls:
+                        if not seen_tool_calls:
+                            seen_tool_calls = True
+                        # Generate tool call ID
+                        tool_call_id = f"{fc.name}_{tool_call_index}"
+                        # Yield tool call start
+                        yield StreamDelta(
+                            delta_type="tool_call",
+                            tool_call_index=tool_call_index,
+                            tool_call_id=tool_call_id,
+                            tool_name=fc.name,
+                        )
+                        # Yield tool input (complete JSON in one delta for Gemini)
+                        if fc.args:
+                            import json
+
+                            args_json = json.dumps(dict(fc.args))
+                            yield StreamDelta(
+                                delta_type="tool_input",
+                                tool_call_index=tool_call_index,
+                                tool_input_delta=args_json,
+                            )
+                        tool_call_index += 1
+
+                # Extract text delta
+                try:
+                    if hasattr(candidate, "text") and candidate.text:
+                        yield StreamDelta(delta_type="text", text=candidate.text)
+                except (AttributeError, ValueError):
+                    # Expected when there are only function calls or no text yet
+                    pass
+
+            # Yield final token usage
+            token_usage: dict[str, int] = {
+                "input_tokens": total_input_tokens,
+                "output_tokens": total_output_tokens,
+                "total_tokens": total_tokens,
+            }
+            yield StreamDelta(delta_type="done", token_usage=token_usage)
+
+        except (LLMAPIError, LLMResponseError):
+            # Re-raise our own errors
+            raise
+        except Exception as e:
+            # Wrap any other exceptions as LLMAPIError
+            raise LLMAPIError(f"Gemini streaming API call failed: {e}") from e
 
     @property
     def model_name(self) -> str:

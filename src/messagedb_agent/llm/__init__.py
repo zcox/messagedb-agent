@@ -35,6 +35,7 @@ from messagedb_agent.llm.base import (
     LLMResponse,
     LLMResponseError,
     Message,
+    StreamDelta,
     ToolCall,
     ToolDeclaration,
 )
@@ -61,6 +62,7 @@ __all__ = [
     "ToolDeclaration",
     "LLMResponse",
     "ToolCall",
+    "StreamDelta",
     # Errors
     "LLMError",
     "LLMAPIError",

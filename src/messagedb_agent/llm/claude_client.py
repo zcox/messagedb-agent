@@ -4,6 +4,7 @@ This module provides a Claude-specific implementation of the BaseLLMClient
 interface, using the AnthropicVertex SDK.
 """
 
+from collections.abc import Iterator
 from typing import Any
 
 from anthropic import AnthropicVertex
@@ -17,6 +18,7 @@ from messagedb_agent.llm.base import (
     LLMResponse,
     LLMResponseError,
     Message,
+    StreamDelta,
     ToolCall,
     ToolDeclaration,
 )
@@ -144,6 +146,130 @@ class ClaudeClient(BaseLLMClient):
         except Exception as e:
             # Wrap any other exceptions as LLMAPIError
             raise LLMAPIError(f"Claude API call failed: {e}") from e
+
+    def call_stream(
+        self,
+        messages: list[Message],
+        tools: list[ToolDeclaration] | None = None,
+        system_prompt: str | None = None,
+    ) -> Iterator[StreamDelta]:
+        """Call the Claude LLM with streaming enabled.
+
+        Args:
+            messages: List of conversation messages
+            tools: Optional list of tool declarations for function calling
+            system_prompt: Optional system prompt to set context
+
+        Yields:
+            StreamDelta objects representing incremental updates
+
+        Raises:
+            LLMAPIError: If the API call fails
+            LLMResponseError: If the response cannot be parsed
+            RuntimeError: If called before initialize()
+        """
+        if self._client is None:
+            raise RuntimeError(
+                "ClaudeClient must be initialized before calling. Call initialize()."
+            )
+
+        if not messages:
+            raise ValueError("messages cannot be empty")
+
+        try:
+            # Convert messages to Anthropic format
+            anthropic_messages = self._format_messages(messages)
+
+            # Convert tools to Anthropic format
+            anthropic_tools: list[dict[str, Any]] | None = None
+            if tools:
+                anthropic_tools = [
+                    {
+                        "name": tool.name,
+                        "description": tool.description,
+                        "input_schema": tool.parameters,
+                    }
+                    for tool in tools
+                ]
+
+            # Build kwargs for messages.stream()
+            create_kwargs: dict[str, Any] = {
+                "model": self.config.model_name,
+                "max_tokens": 4096,
+                "messages": anthropic_messages,
+            }
+            if anthropic_tools:
+                create_kwargs["tools"] = anthropic_tools
+            if system_prompt:
+                create_kwargs["system"] = system_prompt
+
+            # Use the stream context manager for cleaner API
+            # Type ignore needed for streaming API complexity and **kwargs
+            with self._client.messages.stream(**create_kwargs) as stream:  # type: ignore[arg-type]
+                # Track tool calls being constructed
+                tool_call_map: dict[int, dict[str, Any]] = {}
+                current_tool_index = -1
+
+                # Type ignore needed - anthropic streaming events have complex union types
+                for event in stream:  # type: ignore[attr-defined]
+                    event_type = event.type  # type: ignore[attr-defined]
+
+                    # Handle content block start (for tool calls)
+                    if event_type == "content_block_start":
+                        block = event.content_block  # type: ignore[attr-defined]
+                        if block.type == "tool_use":  # type: ignore[attr-defined]
+                            current_tool_index = event.index  # type: ignore[attr-defined]
+                            tool_call_map[current_tool_index] = {
+                                "id": block.id,  # type: ignore[attr-defined]
+                                "name": block.name,  # type: ignore[attr-defined]
+                                "input_json": "",
+                            }
+                            yield StreamDelta(
+                                delta_type="tool_call",
+                                tool_call_index=current_tool_index,  # type: ignore[arg-type]
+                                tool_call_id=block.id,  # type: ignore[attr-defined]
+                                tool_name=block.name,  # type: ignore[attr-defined]
+                            )
+
+                    # Handle content block delta (text or tool input)
+                    elif event_type == "content_block_delta":
+                        delta = event.delta  # type: ignore[attr-defined]
+                        if delta.type == "text_delta":  # type: ignore[attr-defined]
+                            # Text delta
+                            if delta.text:  # type: ignore[attr-defined]
+                                yield StreamDelta(delta_type="text", text=delta.text)  # type: ignore[attr-defined]
+                        elif delta.type == "input_json_delta":  # type: ignore[attr-defined]
+                            # Tool input delta
+                            if delta.partial_json:  # type: ignore[attr-defined]
+                                # Accumulate input JSON
+                                if current_tool_index in tool_call_map:
+                                    tool_call_map[current_tool_index][
+                                        "input_json"
+                                    ] += delta.partial_json  # type: ignore[attr-defined]
+                                yield StreamDelta(
+                                    delta_type="tool_input",
+                                    tool_call_index=current_tool_index,  # type: ignore[arg-type]
+                                    tool_input_delta=delta.partial_json,  # type: ignore[attr-defined]
+                                )
+
+                    # Handle message stop (final usage)
+                    elif event_type == "message_stop":
+                        # Get final message with usage
+                        final_message = stream.get_final_message()
+                        token_usage: dict[str, int] = {
+                            "input_tokens": final_message.usage.input_tokens,
+                            "output_tokens": final_message.usage.output_tokens,
+                            "total_tokens": final_message.usage.input_tokens
+                            + final_message.usage.output_tokens,
+                        }
+                        yield StreamDelta(delta_type="done", token_usage=token_usage)
+
+        except (LLMAPIError, LLMResponseError):
+            # Re-raise our own errors
+            raise
+        except Exception as e:
+            # Wrap any other exceptions as LLMAPIError
+            raise LLMAPIError(f"Claude streaming API call failed: {e}") from e
 
     @property
     def model_name(self) -> str:

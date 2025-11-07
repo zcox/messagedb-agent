@@ -5,6 +5,7 @@ providing a unified interface regardless of the underlying model (Gemini or Clau
 """
 
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any
 
@@ -188,6 +189,82 @@ class Message:
                 raise ValueError("Messages with role='tool' must have tool_name")
 
 
+@dataclass(frozen=True)
+class StreamDelta:
+    """Represents an incremental update in a streaming LLM response.
+
+    This class encapsulates the various types of deltas that can be received
+    during streaming: text deltas, tool call deltas, and final token usage.
+
+    Attributes:
+        delta_type: Type of delta ("text", "tool_call", "tool_input", "usage", "done")
+        text: Text delta content (for delta_type="text")
+        tool_call_index: Index of the tool call being streamed (for tool deltas)
+        tool_call_id: ID of the tool call (for tool deltas)
+        tool_name: Name of the tool being called (for delta_type="tool_call")
+        tool_input_delta: Partial JSON string for tool arguments (for delta_type="tool_input")
+        token_usage: Final token usage statistics (for delta_type="usage" or "done")
+
+    Example:
+        >>> # Text delta
+        >>> delta = StreamDelta(delta_type="text", text="Hello")
+        >>> # Tool call start
+        >>> delta = StreamDelta(
+        ...     delta_type="tool_call",
+        ...     tool_call_index=0,
+        ...     tool_call_id="call_123",
+        ...     tool_name="get_weather"
+        ... )
+        >>> # Tool input delta
+        >>> delta = StreamDelta(
+        ...     delta_type="tool_input",
+        ...     tool_call_index=0,
+        ...     tool_input_delta='{"city": "SF"}'
+        ... )
+        >>> # Final usage
+        >>> delta = StreamDelta(
+        ...     delta_type="done",
+        ...     token_usage={"input_tokens": 100, "output_tokens": 50, "total_tokens": 150}
+        ... )
+    """
+
+    delta_type: str
+    text: str | None = None
+    tool_call_index: int | None = None
+    tool_call_id: str | None = None
+    tool_name: str | None = None
+    tool_input_delta: str | None = None
+    token_usage: dict[str, int] | None = None
+
+    def __post_init__(self) -> None:
+        """Validate stream delta after initialization.
+
+        Raises:
+            ValueError: If delta is invalid
+        """
+        valid_types = {"text", "tool_call", "tool_input", "usage", "done"}
+        if self.delta_type not in valid_types:
+            raise ValueError(f"delta_type must be one of {valid_types}, got {self.delta_type}")
+
+        # Validate type-specific fields
+        if self.delta_type == "text" and not self.text:
+            raise ValueError("text deltas must have non-empty text")
+        if self.delta_type == "tool_call":
+            if self.tool_call_index is None:
+                raise ValueError("tool_call deltas must have tool_call_index")
+            if not self.tool_call_id:
+                raise ValueError("tool_call deltas must have tool_call_id")
+            if not self.tool_name:
+                raise ValueError("tool_call deltas must have tool_name")
+        if self.delta_type == "tool_input":
+            if self.tool_call_index is None:
+                raise ValueError("tool_input deltas must have tool_call_index")
+            if not self.tool_input_delta:
+                raise ValueError("tool_input deltas must have tool_input_delta")
+        if self.delta_type in ("usage", "done") and not self.token_usage:
+            raise ValueError(f"{self.delta_type} deltas must have token_usage")
+
+
 class BaseLLMClient(ABC):
     """Abstract base class for LLM clients.
 
@@ -214,6 +291,43 @@ class BaseLLMClient(ABC):
 
         Raises:
             LLMError: If the LLM call fails
+        """
+        pass
+
+    @abstractmethod
+    def call_stream(
+        self,
+        messages: list[Message],
+        tools: list[ToolDeclaration] | None = None,
+        system_prompt: str | None = None,
+    ) -> Iterator[StreamDelta]:
+        """Call the LLM with streaming enabled, yielding incremental updates.
+
+        This method enables streaming responses from the LLM, yielding deltas
+        as they become available. This is useful for real-time rendering and
+        improved user experience.
+
+        Args:
+            messages: List of conversation messages
+            tools: Optional list of tool declarations for function calling
+            system_prompt: Optional system prompt to set context
+
+        Yields:
+            StreamDelta objects representing incremental updates:
+            - text deltas: Partial text content as it's generated
+            - tool_call deltas: Tool call initiation with name and ID
+            - tool_input deltas: Partial JSON for tool arguments
+            - usage/done deltas: Final token usage when stream completes
+
+        Raises:
+            LLMError: If the LLM call fails
+
+        Example:
+            >>> for delta in client.call_stream(messages):
+            ...     if delta.delta_type == "text":
+            ...         print(delta.text, end="", flush=True)
+            ...     elif delta.delta_type == "done":
+            ...         print(f"\\nUsed {delta.token_usage['total_tokens']} tokens")
         """
         pass
 
