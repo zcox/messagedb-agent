@@ -37,6 +37,11 @@ This project implements an event-sourced architecture for agent systems where al
 
 A browser chat client that streams agent responses and uses an LLM-generated html display of the agent's events. Looks different every time!
 
+```
+docker compose up -d
+uv run messagedb-agent-api
+```
+
 ![](img/web.png)
 
 ![](img/web-tools.png)
