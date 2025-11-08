@@ -40,7 +40,12 @@ from messagedb_agent.projections import (
 )
 from messagedb_agent.projections.next_step import StepType
 from messagedb_agent.store import MessageDBClient, read_stream, write_message
-from messagedb_agent.tools import ToolRegistry, execute_tool, registry_to_function_declarations
+from messagedb_agent.tools import (
+    ToolRegistry,
+    execute_tool,
+    register_builtin_tools,
+    registry_to_function_declarations,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -79,6 +84,7 @@ async def run_agent_step(
     # Create LLM client and tool registry (reuse provided store_client)
     llm_client = create_llm_client(llm_config)
     tool_registry = ToolRegistry()
+    register_builtin_tools(tool_registry)
 
     # TODO: Register display preference tools when implemented
     # (messagedb-agent-112)
@@ -152,6 +158,7 @@ async def run_agent_step_streaming(
     # Create LLM client and tool registry
     llm_client = create_llm_client(llm_config)
     tool_registry = ToolRegistry()
+    register_builtin_tools(tool_registry)
 
     # Process loop: continue until session terminates
     max_iterations = 100
