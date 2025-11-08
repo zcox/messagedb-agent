@@ -303,18 +303,18 @@ class TestSetDisplayPreferences:
 class TestRegisterDisplayTools:
     """Tests for register_display_tools function."""
 
-    def test_registers_both_tools(self):
+    def test_registers_both_tools(self, messagedb_client: MessageDBClient):
         """Test that register_display_tools registers both tools."""
         registry = ToolRegistry()
-        register_display_tools(registry)
+        register_display_tools(registry, messagedb_client, "test-thread")
 
         assert "get_display_preferences" in registry
         assert "set_display_preferences" in registry
 
-    def test_registered_tools_have_correct_names(self):
+    def test_registered_tools_have_correct_names(self, messagedb_client: MessageDBClient):
         """Test that registered tools have correct names."""
         registry = ToolRegistry()
-        register_display_tools(registry)
+        register_display_tools(registry, messagedb_client, "test-thread")
 
         get_tool = registry.get("get_display_preferences")
         set_tool = registry.get("set_display_preferences")
@@ -322,10 +322,10 @@ class TestRegisterDisplayTools:
         assert get_tool.name == "get_display_preferences"
         assert set_tool.name == "set_display_preferences"
 
-    def test_registered_tools_have_descriptions(self):
+    def test_registered_tools_have_descriptions(self, messagedb_client: MessageDBClient):
         """Test that registered tools have descriptions."""
         registry = ToolRegistry()
-        register_display_tools(registry)
+        register_display_tools(registry, messagedb_client, "test-thread")
 
         get_tool = registry.get("get_display_preferences")
         set_tool = registry.get("set_display_preferences")

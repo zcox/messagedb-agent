@@ -86,7 +86,7 @@ async def run_agent_step(
     llm_client = create_llm_client(llm_config)
     tool_registry = ToolRegistry()
     register_builtin_tools(tool_registry)
-    register_display_tools(tool_registry)
+    register_display_tools(tool_registry, store_client, thread_id)
 
     # Run agent processing loop in thread pool to avoid blocking async event loop
     # This allows the polling loop to run concurrently and see events in real-time
@@ -158,7 +158,7 @@ async def run_agent_step_streaming(
     llm_client = create_llm_client(llm_config)
     tool_registry = ToolRegistry()
     register_builtin_tools(tool_registry)
-    register_display_tools(tool_registry)
+    register_display_tools(tool_registry, store_client, thread_id)
 
     # Process loop: continue until session terminates
     max_iterations = 100

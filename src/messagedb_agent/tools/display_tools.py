@@ -219,59 +219,74 @@ async def set_display_preferences(
     return f"Display preferences updated to: {merged}"
 
 
-def register_display_tools(registry: Any) -> None:
-    """Register display preference tools to a registry.
+def register_display_tools(registry: Any, client: MessageDBClient, thread_id: str) -> None:
+    """Register display preference tools to a registry with context injection.
 
     This function registers the get_display_preferences and set_display_preferences
-    tools to the provided registry. These tools allow the LLM to manage display
-    preferences without explicit intent detection.
+    tools to the provided registry. The tools are created as closures that capture
+    the MessageDBClient and thread_id from the execution context.
 
     Args:
         registry: ToolRegistry instance to register tools to
+        client: MessageDBClient instance to use for reading/writing events
+        thread_id: Thread ID for this agent session
 
     Example:
         >>> from messagedb_agent.tools import ToolRegistry
+        >>> from messagedb_agent.store import MessageDBClient, MessageDBConfig
         >>> from messagedb_agent.tools.display_tools import register_display_tools
-        >>> registry = ToolRegistry()
-        >>> register_display_tools(registry)
-        >>> "get_display_preferences" in registry
-        True
-        >>> "set_display_preferences" in registry
+        >>> config = MessageDBConfig()
+        >>> with MessageDBClient(config) as client:
+        ...     registry = ToolRegistry()
+        ...     register_display_tools(registry, client, "thread123")
+        ...     "get_display_preferences" in registry
         True
     """
-    from messagedb_agent.tools.registry import PermissionLevel, register_tool
+    from messagedb_agent.tools.registry import PermissionLevel, Tool
 
-    # Wrapper functions with explicit type annotations for type checker
-    def get_prefs_wrapper(client: MessageDBClient, thread_id: str) -> str:
+    # Create closures that capture client and thread_id
+    def get_prefs_impl() -> str:
+        """Implementation that uses captured context."""
         return get_display_preferences(client, thread_id)
 
-    def set_prefs_wrapper(
-        client: MessageDBClient,
-        thread_id: str,
-        instruction: str,
-        merge_with_existing: bool = True,
-    ) -> str:
-        # This is a sync wrapper that will be called by the tool executor
-        # The actual implementation is async, but we'll handle that in the executor
+    def set_prefs_impl(instruction: str, merge_with_existing: bool = True) -> str:
+        """Implementation that uses captured context."""
         import asyncio
 
         return asyncio.run(
             set_display_preferences(client, thread_id, instruction, merge_with_existing)
         )
 
-    # Register get_display_preferences (SAFE - just reads data)
-    register_tool(
-        registry,
+    # Register get_display_preferences with explicit schema (no parameters)
+    get_prefs_tool = Tool(
         name="get_display_preferences",
         description="Get the current display preferences for how events are rendered in the UI",
+        parameters_schema={"type": "object", "properties": {}, "required": []},
+        function=get_prefs_impl,
         permission_level=PermissionLevel.SAFE,
-    )(get_prefs_wrapper)
+    )
+    registry.register(get_prefs_tool)
 
-    # Register set_display_preferences (SAFE - only affects display, not core data)
-    # Note: Made SAFE because display preferences are low-risk and frequently changed
-    register_tool(
-        registry,
+    # Register set_display_preferences with explicit schema (only LLM-provided params)
+    set_prefs_tool = Tool(
         name="set_display_preferences",
         description="Update how events are displayed in the UI",
+        parameters_schema={
+            "type": "object",
+            "properties": {
+                "instruction": {
+                    "type": "string",
+                    "description": "The display instruction from the user",
+                },
+                "merge_with_existing": {
+                    "type": "boolean",
+                    "description": "If true, merge with current preferences. "
+                    "If false, replace entirely.",
+                },
+            },
+            "required": ["instruction"],
+        },
+        function=set_prefs_impl,
         permission_level=PermissionLevel.SAFE,
-    )(set_prefs_wrapper)
+    )
+    registry.register(set_prefs_tool)
