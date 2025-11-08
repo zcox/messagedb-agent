@@ -33,6 +33,14 @@ Now trying out [beads](https://github.com/steveyegge/beads)...
 
 This project implements an event-sourced architecture for agent systems where all agent interactions, decisions, and actions are recorded as immutable events in persistent streams. The system enables durable, observable, and distributed execution of agent workflows through event-driven processing.
 
+## Web Example
+
+A browser chat client that streams agent responses and uses an LLM-generated html display of the agent's events. Looks different every time!
+
+![](img/web.png)
+
+![](img/web-tools.png)
+
 ## TUI Example
 
 ```
