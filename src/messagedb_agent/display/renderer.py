@@ -245,16 +245,13 @@ async def render_html(
         if end > start:
             raw_html = raw_html[start:end].strip()
 
-    # Sanitize HTML
-    sanitized_html = sanitize_html(raw_html)
-
+    # Sanitization disabled - trust LLM output
     log.info(
         "HTML rendering complete",
         raw_length=len(raw_html),
-        sanitized_length=len(sanitized_html),
     )
 
-    return sanitized_html
+    return raw_html
 
 
 async def render_html_stream(

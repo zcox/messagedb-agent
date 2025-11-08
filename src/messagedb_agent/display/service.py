@@ -22,7 +22,7 @@ from fastapi.templating import Jinja2Templates
 from messagedb_agent.config import VertexAIConfig
 from messagedb_agent.display.agent_runner import run_agent_step, run_agent_step_streaming
 from messagedb_agent.display.models import RenderRequest, RenderResponse
-from messagedb_agent.display.renderer import render_html, render_html_stream, sanitize_html
+from messagedb_agent.display.renderer import render_html, render_html_stream
 from messagedb_agent.projections.display_prefs import project_display_prefs
 from messagedb_agent.store import MessageDBClient, MessageDBConfig, read_stream, write_message
 
@@ -231,13 +231,12 @@ def create_app() -> FastAPI:
                     if end > start:
                         raw_html = raw_html[start:end].strip()
 
-                # Sanitize HTML
-                final_html = sanitize_html(raw_html)
+                # Sanitization disabled - trust LLM output
+                final_html = raw_html
 
                 logger.info(
                     "Final HTML processed",
                     raw_length=len(raw_html),
-                    sanitized_length=len(final_html),
                 )
 
                 # Phase 3: Send final result
